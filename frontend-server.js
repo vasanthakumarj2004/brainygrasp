@@ -52,6 +52,14 @@ function resolveFilePath(cleanPath) {
     return path.join(ADMIN_DIR, cleanPath.slice('/admin/'.length));
   }
 
+  // /affiliate/* → serve from frontend/affiliate/
+  if (cleanPath === '/affiliate' || cleanPath === '/affiliate/') {
+    return path.join(FRONTEND_DIR, 'affiliate', 'login.html');
+  }
+  if (cleanPath.startsWith('/affiliate/')) {
+    return path.join(FRONTEND_DIR, 'affiliate', cleanPath.slice('/affiliate/'.length));
+  }
+
   // /frontend/* legacy prefix → strip and serve from frontend/
   if (cleanPath.startsWith('/frontend/')) {
     return path.join(FRONTEND_DIR, cleanPath.slice('/frontend/'.length));
@@ -111,9 +119,20 @@ const server = http.createServer((req, res) => {
 
   let filePath = resolveFilePath(decodedPath);
 
-  // If the resolved path is a directory, look for index.html inside it
+  // Fallback 1: If file doesn't exist directly and has no extension, try appending .html
+  if (!fs.existsSync(filePath) && !path.extname(filePath)) {
+    if (fs.existsSync(filePath + '.html')) {
+      filePath = filePath + '.html';
+    }
+  }
+
+  // Fallback 2: If the resolved path is a directory, look for index.html or login.html inside it
   if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
-    filePath = path.join(filePath, 'index.html');
+    if (fs.existsSync(path.join(filePath, 'index.html'))) {
+      filePath = path.join(filePath, 'index.html');
+    } else if (fs.existsSync(path.join(filePath, 'login.html'))) {
+      filePath = path.join(filePath, 'login.html');
+    }
   }
 
   const ext         = path.extname(filePath).toLowerCase();
