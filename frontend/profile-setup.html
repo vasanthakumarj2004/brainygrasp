@@ -77,7 +77,7 @@
         .progress-container {
             margin-bottom: 30px;
         }
-        
+
         .progress-text {
             display: flex;
             justify-content: space-between;
@@ -267,7 +267,7 @@
             <h1>Create Your Profile</h1>
             <p>Help us customize your dashboard and experience</p>
         </div>
-        
+
         <div class="progress-container">
             <div class="progress-text">
                 <span>Profile Completion</span>
@@ -277,7 +277,7 @@
                 <div class="progress-fill" id="progressFill"></div>
             </div>
         </div>
-        
+
         <form id="profileSetupForm">
             <div class="form-grid">
                 <!-- Full Name -->
@@ -286,7 +286,7 @@
                     <input type="text" id="fullName" name="fullName" required placeholder="e.g. Vasanth Kumar">
                     <div class="error-message" id="nameError"></div>
                 </div>
-                
+
                 <!-- Gender -->
                 <div class="form-group full-width">
                     <label>Gender <span class="required">*</span></label>
@@ -306,57 +306,57 @@
                     </div>
                     <div class="error-message" id="genderError"></div>
                 </div>
-                
+
                 <!-- Phone -->
                 <div class="form-group full-width">
                     <label for="phone">Phone Number <span class="required">*</span></label>
                     <input type="tel" id="phone" name="phone" required placeholder="Enter 10-digit number">
                     <div class="error-message" id="phoneError"></div>
                 </div>
-                
+
                 <!-- Address -->
                 <div class="form-group full-width">
                     <label for="address">Street Address <span class="required">*</span></label>
                     <textarea id="address" name="address" rows="2" required placeholder="Door No, Street Name..."></textarea>
                     <div class="error-message" id="addressError"></div>
                 </div>
-                
+
                 <!-- City -->
                 <div class="form-group">
                     <label for="city">City <span class="required">*</span></label>
                     <input type="text" id="city" name="city" required placeholder="City">
                     <div class="error-message" id="cityError"></div>
                 </div>
-                
+
                 <!-- State -->
                 <div class="form-group">
                     <label for="state">State <span class="required">*</span></label>
                     <input type="text" id="state" name="state" required placeholder="State">
                     <div class="error-message" id="stateError"></div>
                 </div>
-                
+
                 <!-- PIN -->
                 <div class="form-group">
                     <label for="pincode">PIN Code <span class="required">*</span></label>
                     <input type="text" id="pincode" name="pincode" required placeholder="6-digit PIN">
                     <div class="error-message" id="pincodeError"></div>
                 </div>
-                
+
                 <!-- Country -->
                 <div class="form-group">
                     <label for="country">Country</label>
                     <input type="text" id="country" name="country" value="India" readonly>
                 </div>
             </div>
-            
+
             <button type="submit" class="btn-primary" id="saveProfileBtn">
                 Save & Continue
             </button>
-            
+
             <div class="success-message" id="successMessage">
                 ✅ Profile saved! Redirecting you now...
             </div>
-            
+
             <div class="skip-text">
                 <a href="#" id="skipLink">I'll do this later</a>
             </div>
@@ -370,7 +370,7 @@
             const form = document.getElementById('profileSetupForm');
             const progressFill = document.getElementById('progressFill');
             const progressPercent = document.getElementById('progressPercent');
-            
+
             // Auth guard
             const token = localStorage.getItem('bg_token');
             if (!token) { window.location.href = 'login.html'; return; }
@@ -378,7 +378,7 @@
             // Determine where to go after profile save
             // postProfileRedirect is set by auth-unified.js during login
             let postRedirect = localStorage.getItem('postProfileRedirect') || 'dashboard-new.html';
-            
+
             // ── BUG FIX: Handle stale localStorage values from before the fix
             if (postRedirect === 'dashboard.html' || postRedirect.endsWith('/dashboard.html')) {
                 postRedirect = 'dashboard-new.html';
@@ -393,12 +393,12 @@
                     window.location.href = postRedirect;
                 });
             }
-            
+
             // Progress Tracker
             function updateProgress() {
                 const requiredFields = form.querySelectorAll('[required]');
                 let filled = 0;
-                
+
                 requiredFields.forEach(field => {
                     if (field.type === 'radio') {
                         if (form.querySelector(`input[name="${field.name}"]:checked`)) filled++;
@@ -410,11 +410,11 @@
                 // Deduplicate radio groups for count
                 const totalSteps = requiredFields.length - 2; // Adjusting for 3 radios = 1 choice
                 const percentage = Math.min(Math.round((filled / 7) * 100), 100);
-                
+
                 progressFill.style.width = percentage + '%';
                 progressPercent.textContent = percentage + '%';
             }
-            
+
             form.querySelectorAll('input, textarea').forEach(input => {
                 input.addEventListener('input', updateProgress);
                 input.addEventListener('change', updateProgress);
@@ -448,7 +448,7 @@
                         },
                         body: JSON.stringify(formData)
                     });
-                    
+
                     const data = await response.json();
                     if (data.success) {
                         // Update local user data

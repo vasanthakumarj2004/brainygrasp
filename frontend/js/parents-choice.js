@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // We will display all trending and bestsellers on this page by default
   const allProducts = [...products.trending, ...products.bestsellers, ...products.bundles];
-  const uniqueProducts = Array.from(new Map(allProducts.map(item => [item.id, item])).values());
+  let uniqueProducts = Array.from(new Map(allProducts.map(item => [item.id, item])).values());
   
   let currentProducts = [...uniqueProducts];
   let currentFilters = {
@@ -63,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 1. Age Pills Filter
     if (currentFilters.ageGroup) {
-      filtered = filtered.filter(p => (p.ageGroup || p.age_group) === currentFilters.ageGroup);
+      filtered = filtered.filter(p => productMatchesAge(p, currentFilters.ageGroup));
     }
 
     // 2. Sidebar Array Filters
@@ -203,6 +203,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Handle hash changes if clicked from within the same page
   window.addEventListener('hashchange', applyHashFilter);
 
+  document.addEventListener('productsUpdated', event => {
+    if (!event.detail?.success) return;
+    uniqueProducts = window.catalogProducts || [];
+    createCheckboxes('pcFilterCategories', [...new Set(uniqueProducts.map(p => p.category).filter(Boolean))], 'categories');
+    createCheckboxes('pcFilterSkills', [...new Set(uniqueProducts.flatMap(p => p.skills || []))], 'skills');
+    createCheckboxes('pcFilterThemes', [...new Set(uniqueProducts.map(p => p.theme).filter(Boolean))], 'themes');
+    applyFiltersAndSort();
+  });
   // Initial Render
   applyHashFilter();
 });

@@ -1,7 +1,7 @@
 // === Initialize Product Grids ===
 function initProductGrids() {
   renderProducts('trendingGrid', products.trending);
-  renderProducts('handpickedGrid', products.bestsellers);
+  renderProducts('handpickedGrid', window.catalogProducts || []);
 }
  
 // === Hero Slider ===
@@ -66,7 +66,8 @@ function initTabs() {
             renderProducts('trendingGrid', filtered.length > 0 ? filtered : products.trending);
           }
         } else if (gridId === 'handpickedGrid') {
-          if (tab === 'bestsellers') renderProducts('handpickedGrid', products.bestsellers);
+          if (tab === 'all') renderProducts('handpickedGrid', window.catalogProducts || []);
+          else if (tab === 'bestsellers') renderProducts('handpickedGrid', products.bestsellers);
           else if (tab === 'newlaunches') renderProducts('handpickedGrid', products.newlaunches);
           else if (tab === 'bundles') renderProducts('handpickedGrid', products.bundles);
         }

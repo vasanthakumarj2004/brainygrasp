@@ -882,7 +882,19 @@ function initQuickView() {
     currentQuickViewItem = productInfo;
 
     const imgEl = document.getElementById('quickviewImg');
-    if (imgEl) imgEl.src = productInfo.image;
+    if (imgEl) { imgEl.src = productImageUrl(productInfo.image); imgEl.alt = productInfo.name; }
+
+    const description = modal.querySelector('.quickview-description');
+    if (description) description.innerHTML = productDetailsHTML(productInfo);
+    const gallery = modal.querySelector('#quickviewThemeGrid');
+    if (gallery) {
+      const pictures = productInfo.details?.images || [{ src: productInfo.image, label: 'Product' }];
+      gallery.innerHTML = pictures.map((picture, index) => `<button type="button" class="theme-btn ${index === 0 ? 'active' : ''}" data-product-image="${catalogEscape(productImageUrl(picture.src))}" aria-label="View ${catalogEscape(picture.label)}"><img src="${catalogEscape(productImageUrl(picture.src))}" alt="${catalogEscape(productInfo.name + ' — ' + picture.label)}"><span>${catalogEscape(picture.label)}</span></button>`).join('');
+    }
+    const offer = modal.querySelector('.quickview-offer');
+    if (offer) { offer.textContent = productInfo.offer || ''; offer.hidden = !productInfo.offer; }
+    const addButton = document.getElementById('quickviewAddToCart');
+    if (addButton) addButton.disabled = productInfo.stock_quantity === 0;
 
     const nameEl = document.getElementById('quickviewName');
     if (nameEl) nameEl.textContent = productInfo.name;
@@ -924,6 +936,7 @@ function initQuickView() {
     if (ageEl) ageEl.textContent = `Ages: ${productInfo.age || '3+ Years'}`;
 
     if (reviewsEl) {
+      reviewsEl.hidden = !productInfo.reviews;
       const countEl = reviewsEl.querySelector('.review-count');
       if (countEl) countEl.textContent = `${productInfo.reviews || 0} reviews`;
     }
@@ -950,9 +963,24 @@ function initQuickView() {
 
   overlay.addEventListener('click', closeQuickView);
 
+  modal.querySelector('#quickviewThemeGrid')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-product-image]');
+    if (!button) return;
+    document.getElementById('quickviewImg').src = button.dataset.productImage;
+    modal.querySelectorAll('[data-product-image]').forEach(item => item.classList.toggle('active', item === button));
+  });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeQuickView(); });
+
   document.addEventListener('click', (e) => {
     const card = e.target.closest('.product-card');
     if (card && !e.target.closest('.add-to-cart-btn') && !e.target.closest('.share-btn') && !e.target.closest('.share-dropdown')) {
+      const selectedProduct = (window.catalogProducts || []).find(product => String(product.id) === card.dataset.id);
+      if (selectedProduct) {
+        openQuickView({ ...selectedProduct, badgeText: selectedProduct.badge === 'new' ? 'New Launch' : selectedProduct.badge || '', badgeClass: 'badge-blue' });
+        return;
+      }
+      // Search has its own dialog; do not manufacture a product ID from markup.
+      if (!card.dataset.id) return;
       const nameEl = card.querySelector('.product-name');
       const name = nameEl ? nameEl.textContent.trim() : 'Product';
 
@@ -1046,7 +1074,8 @@ function initQuickView() {
 
           name: currentQuickViewItem.name,
 
-          price
+          price,
+          image: currentQuickViewItem.image
 
         });
 

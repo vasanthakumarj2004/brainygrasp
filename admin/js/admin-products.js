@@ -38,11 +38,29 @@
       };
     }
 
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://') && !trimmed.startsWith('/')) {
-      return { valid: false, message: 'Please enter a valid HTTP/HTTPS image URL.' };
-    }
+    try {
+      const relative = trimmed.startsWith('/') && !trimmed.startsWith('//');
+      const parsed = new URL(trimmed, relative ? window.location.origin : undefined);
+      if (/[\s<>"'\\]/.test(trimmed) || parsed.username || parsed.password ||
+          !['https:', ...(window.location.protocol === 'http:' ? ['http:'] : [])].includes(parsed.protocol)) throw new Error();
+    } catch { return { valid: false, message: 'Enter a direct HTTPS image URL or a site path starting with /.' }; }
 
     return { valid: true };
+  }
+
+  function verifyImageLoads(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const finish = error => {
+        clearTimeout(timer); img.onload = null; img.onerror = null;
+        error ? reject(new Error(error)) : resolve();
+      };
+      const timer = setTimeout(() => finish('Image loading timed out. Use a publicly accessible image and retry.'), 12000);
+      img.referrerPolicy = 'no-referrer';
+      img.onload = () => finish(img.naturalWidth > 0 ? null : 'The URL did not load a usable image.');
+      img.onerror = () => finish('Image could not be loaded. Product was not saved. Check the image URL.');
+      img.src = url;
+    });
   }
 
   function handleImagePreview(url) {
@@ -137,7 +155,7 @@
         <td class="img-cell">
           <img src="${esc(p.image)}" alt="${esc(p.name)}" onerror="this.onerror=null;this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2245%22 viewBox=%220 0 60 45%22><rect width=%22100%25%22 height=%22100%25%22 fill=%22%231c2333%22/><text x=%2250%25%22 y=%2250%25%22 fill=%22%2364748b%22 font-size=%2210%22 text-anchor=%22middle%22 dy=%22.3em%22>No Image</text></svg>'">
         </td>
-        <td class="name-cell">${esc(p.name)}</td>
+        <td class="name-cell">${esc(p.name)}${Number.isInteger(p.stock_quantity) ? `<div>Stock: ${p.stock_quantity}</div>` : ''}<div style="font-size:12px;color:var(--muted)">${p.shipping_weight_g ? `${esc(p.shipping_weight_g)} g · ${esc(p.shipping_length_cm)} × ${esc(p.shipping_breadth_cm)} × ${esc(p.shipping_height_cm)} cm` : 'Shipping measurements needed'}</div></td>
         <td><span class="group-tag group-${esc(p.group_name)}">${esc(capitalize(p.group_name))}</span></td>
         <td>${esc(p.category || '—')}</td>
         <td class="price-cell">₹${Number(p.price).toLocaleString('en-IN')}</td>
@@ -216,6 +234,9 @@
     document.getElementById('f_sales').value = p.sales || 0;
     document.getElementById('f_offer').value = p.offer || '';
     document.getElementById('f_image').value = p.image || '';
+    for (const key of ['shipping_weight_g', 'shipping_length_cm', 'shipping_breadth_cm', 'shipping_height_cm']) {
+      document.getElementById('f_' + key).value = p[key] ?? '';
+    }
 
     const skills = Array.isArray(p.skills) ? p.skills.join(', ') : (p.skills || '');
     document.getElementById('f_skills').value = skills;
@@ -290,9 +311,17 @@
     };
 
     const editId = document.getElementById('editProductId').value;
+    for (const key of ['shipping_weight_g', 'shipping_length_cm', 'shipping_breadth_cm', 'shipping_height_cm']) {
+      const value = document.getElementById('f_' + key).value.trim();
+      payload[key] = value === '' ? null : Number(value);
+    }
     const path = editMode ? `/admin/products/${editId}` : '/admin/products';
 
     try {
+      submitBtn.textContent = 'Checking image...';
+      await verifyImageLoads(image);
+      if (document.getElementById('f_image').value.trim() !== image) throw new Error('The image URL changed. Please save again.');
+      submitBtn.textContent = 'Saving...';
       const res = await adminFetch(path, {
         method: editMode ? 'PUT' : 'POST',
         body: JSON.stringify(payload)
@@ -311,7 +340,7 @@
       }
     } catch (err) {
       if (err.message !== 'Session expired') {
-        console.error('Product save network error:', err);
+        console.error('Product save failed:', err);
         showToast(`❌ Error: ${err.message}`, 'error');
       }
     } finally {

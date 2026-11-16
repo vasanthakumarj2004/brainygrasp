@@ -582,6 +582,10 @@
   padding-right: 20px;
 }
 
+.banner-gifts .img-main {
+  width: 380px;
+}
+
 /* Cluster Layout 3 */
 .banner-gifts .img-box-1 {
   width: 260px;
@@ -970,6 +974,7 @@
   /* Main Featured Center Image */
   .banner-launches .img-main,
   .banner-toddler .img-main,
+  .banner-gifts .img-main,
   .banner-gifts .img-box-2,
   .banner-wrap .img-box-2,
   .banner-yellow .img-main {

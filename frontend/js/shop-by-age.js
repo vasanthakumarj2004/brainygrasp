@@ -1,5 +1,7 @@
 // === Shop By Age Filtering & Sorting ===
+let refreshAgeProducts;
 function initShopByAge() {
+  if (refreshAgeProducts) { refreshAgeProducts(); return; }
   const shopByAgeLink = document.querySelector('a[href="#shopByAge"]');
   if (shopByAgeLink) {
     shopByAgeLink.addEventListener('click', (e) => {
@@ -26,9 +28,9 @@ function initShopByAge() {
   const grid = document.getElementById('shopByAgeGrid');
   if (!grid) return;
 
-  const allProducts = [...products.trending, ...products.bestsellers, ...products.newlaunches];
+  const allProducts = window.catalogProducts || [];
   // Deduplicate by ID
-  const uniqueProducts = Array.from(new Map(allProducts.map(item => [item.id, item])).values());
+  let uniqueProducts = Array.from(new Map(allProducts.map(item => [item.id, item])).values());
   
   let currentProducts = [...uniqueProducts];
   let currentFilters = {
@@ -48,10 +50,10 @@ function initShopByAge() {
   }
 
   function applyFiltersAndSort() {
-    let filtered = uniqueProducts;
+    let filtered = [...uniqueProducts];
 
     if (currentFilters.ageGroup) {
-      filtered = filtered.filter(p => (p.ageGroup || p.age_group) === currentFilters.ageGroup);
+      filtered = filtered.filter(p => productMatchesAge(p, currentFilters.ageGroup));
     }
     if (currentFilters.categories.length > 0) {
       filtered = filtered.filter(p => currentFilters.categories.includes(p.category));
@@ -167,16 +169,22 @@ function initShopByAge() {
     }
   }
 
+  refreshAgeProducts = (success = true) => {
+    uniqueProducts = [...(window.catalogProducts || [])];
+    if (success) applyFiltersAndSort();
+    else document.getElementById('shopByAgeCount').textContent = 'Products unavailable';
+  };
   renderShopByAge();
 }
 
-document.addEventListener('productsUpdated', () => {
-  initShopByAge();
+document.addEventListener('productsUpdated', event => {
+  if (refreshAgeProducts) refreshAgeProducts(event.detail?.success);
+  else if (event.detail?.success) initShopByAge();
 });
 
 // === Discovery Sliders ===
 function initDiscoverySliders() {
-  renderProducts('youMayAlsoLikeGrid', products.bestsellers);
+  renderProducts('youMayAlsoLikeGrid', window.catalogProducts || []);
   renderProducts('recentlyViewedGrid', products.newlaunches);
 }
 

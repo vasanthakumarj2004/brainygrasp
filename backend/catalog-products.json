@@ -1,0 +1,78 @@
+[
+  {
+    "name": "SENTENCE SAFARI",
+    "group_name": "trending",
+    "price": 549,
+    "original_price": 679,
+    "save": "19.1%",
+    "age": "5–8 years",
+    "age_group": "5-8",
+    "badge": "new",
+    "image": "/images/products/sentence-safari/front.png",
+    "category": "Educational Toys",
+    "skills": ["Sentence building skills", "Language Development"],
+    "theme": "Language Learning",
+    "type": "Single Products",
+    "sales": 0,
+    "reviews": 0,
+    "offer": "Learn words. Build sentences. Explore language.",
+    "stock_quantity": 50,
+    "shipping_weight_g": 320,
+    "shipping_length_cm": 15.0114,
+    "shipping_breadth_cm": 15.0114,
+    "shipping_height_cm": 6.0452,
+    "details": {
+      "subtitle": "Basic English sentence learning kit",
+      "description": "Turn language learning into an exciting adventure with Sentence Safari! Children use 130 colourful word cards to explore words, form meaningful sentences, and practise essential grammar concepts through hands-on play. Mix, match, and create sentences while discovering how words work together. Designed for ages 5–8, it makes a thoughtful gift for birthdays, holidays, and special occasions.",
+      "includes": ["130 colourful word cards", "8 grammar categories", "1 parent guide", "1 storage box"],
+      "categories": ["Subject", "Verb", "Object", "Adjective", "Adverb", "Preposition", "Article", "Conjunction"],
+      "weight_g": 300,
+      "covered_weight_g": 320,
+      "dimensions_inches": [5.91, 5.91, 2.38],
+      "age_min": 5,
+      "age_max": 8,
+      "images": [
+        {"src": "/images/products/sentence-safari/front.png", "label": "Front"},
+        {"src": "/images/products/sentence-safari/box.png", "label": "Box"},
+        {"src": "/images/products/sentence-safari/back.png", "label": "Contents & guide"}
+      ]
+    }
+  },
+  {
+    "name": "MAG CLASH",
+    "group_name": "trending",
+    "price": 549,
+    "original_price": 649,
+    "save": "15.4%",
+    "age": "8 years and above",
+    "age_group": "8+",
+    "badge": "new",
+    "image": "/images/products/mag-clash/front.png",
+    "category": "Educational Toys",
+    "skills": ["Strategic thinking", "Concentration", "Decision-making", "Hand-eye coordination"],
+    "theme": "Strategy Games",
+    "type": "Single Products",
+    "sales": 0,
+    "reviews": 0,
+    "offer": "Think ahead. Control the attraction. Master the clash.",
+    "stock_quantity": 50,
+    "shipping_weight_g": 580,
+    "shipping_length_cm": 15.0114,
+    "shipping_breadth_cm": 15.0114,
+    "shipping_height_cm": 6.0452,
+    "details": {
+      "subtitle": "Magnetic skill-based game",
+      "description": "Where magnetic attraction meets strategy. Players take turns placing magnets within the rope boundary, carefully planning every move while trying to prevent the magnets from attracting and clashing. Every move calls for focus, precision, prediction, and strategy. A single placement can trigger a magnetic clash and change the game instantly. Designed for fun, interactive play for ages 8 and above.",
+      "includes": ["24 magnetic game pieces", "1 playing rope", "1 storage box"],
+      "weight_g": 580,
+      "dimensions_inches": [5.91, 5.91, 2.38],
+      "age_min": 8,
+      "age_max": null,
+      "images": [
+        {"src": "/images/products/mag-clash/front.png", "label": "Front"},
+        {"src": "/images/products/mag-clash/box.png", "label": "Box"},
+        {"src": "/images/products/mag-clash/back.png", "label": "Contents & guide"}
+      ]
+    }
+  }
+]

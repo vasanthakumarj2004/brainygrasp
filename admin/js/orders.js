@@ -84,14 +84,15 @@
     }
   }
 
-  async function pushShiprocket(id, btn) {
+  async function pushShiprocket(id, btn, parcel) {
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Booking...'; }
     try {
-      const res = await adminFetch(`/admin/orders/${id}/push-shiprocket`, { method: 'POST' });
+      const res = await adminFetch(`/admin/orders/${id}/push-shiprocket`, { method: 'POST', body: JSON.stringify(parcel ? { parcel } : {}) });
       const data = await res.json();
       if (res.ok && data.success) {
-        showToast(`✅ Shipment booked! AWB: ${data.awb}`, 'ok');
+        showToast(data.message || 'Shipment queued. Check booking progress.', 'ok');
         loadOrders();
+        await openModal(id);
       } else {
         showToast(`❌ ${data.error || 'Shipment booking failed'}`, 'err');
       }
@@ -100,6 +101,16 @@
     } finally {
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Book'; }
     }
+  }
+
+  function shippingState(o) {
+    const details = o.shipping_job_details || {};
+    const labels = { awaiting_parcel: 'Parcel review needed', queued: 'Queued for booking', processing: 'Booking in progress', retry: 'Retry scheduled', needs_review: 'Needs attention', completed: 'Pickup requested - documents ready' };
+    return details.pickupConfirmed && o.shipping_job_state !== 'completed' ? 'Pickup requested - documents pending' : labels[o.shipping_job_state] || 'Not booked';
+  }
+  function documentLink(url, label) {
+    if (typeof url !== 'string' || !/^https:\/\//i.test(url)) return '';
+    return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
   }
 
   function renderTable(orders) {
@@ -115,12 +126,7 @@
       const courier = o.courier_name || '—';
       const payMode = (o.payment_method || 'COD').toUpperCase();
 
-      let actionBtn = '';
-      if (o.awb_number) {
-        actionBtn = `<button class="btn-refresh-shipment" data-id="${o.id}" style="padding:4px 8px;font-size:11px;cursor:pointer;border-radius:6px;border:1px solid #cbd5e1;background:#fff;" title="Refresh status from Shiprocket"><i class="fas fa-sync-alt"></i> Refresh</button>`;
-      } else {
-        actionBtn = `<button class="btn-push-shipment" data-id="${o.id}" style="padding:4px 8px;font-size:11px;cursor:pointer;border-radius:6px;border:none;background:#667eea;color:#fff;" title="Push order to Shiprocket"><i class="fas fa-paper-plane"></i> Book</button>`;
-      }
+      const actionBtn = `<button class="btn-push-shipment" data-id="${o.id}" type="button">Shipping details</button>`;
 
       return `<tr data-id="${o.id}">
         <td><span class="oid">#${o.id}</span></td>
@@ -130,7 +136,7 @@
         </td>
         <td style="font-weight:700;color:var(--green)">${fmtRupee(o.total)}</td>
         <td><span class="badge" style="background:#eef2ff;color:#4f46e5;font-weight:700;">${payMode}</span></td>
-        <td><span class="badge ${badgeClass(shipStatus)}">${esc(shipStatus)}</span></td>
+        <td><span class="badge ${badgeClass(shipStatus)}">${esc(shipStatus)}</span><div style="font-size:12px">${esc(shippingState(o))}</div></td>
         <td><span style="font-family:monospace;font-size:12px;font-weight:600;color:#334155">${esc(awb)}</span></td>
         <td style="font-size:12px;color:var(--muted)">${esc(courier)}</td>
         <td style="font-size:12px;color:var(--muted)">${fmtDate(o.created_at)}</td>
@@ -153,7 +159,7 @@
     tbody.querySelectorAll('.btn-push-shipment').forEach(btn => {
       btn.onclick = (e) => {
         e.stopPropagation();
-        pushShiprocket(btn.dataset.id, btn);
+        openModal(btn.dataset.id);
       };
     });
   }
@@ -174,11 +180,14 @@
 
       document.getElementById('modalTitle').textContent = `Order #${o.id} · ${o.status}`;
 
-      const addressLine = [o.addr_name, o.line1, o.city, o.state, o.pincode].filter(Boolean).join(', ');
+      const savedAddress = o.shipping_snapshot?.address;
+      const addressLine = savedAddress
+        ? [savedAddress.full_name, savedAddress.line1, savedAddress.line2, savedAddress.city, savedAddress.state, savedAddress.pincode].filter(Boolean).join(', ')
+        : [o.addr_name, o.line1, o.city, o.state, o.pincode].filter(Boolean).join(', ');
       document.getElementById('modalInfo').innerHTML = `
         <div class="info-block"><label>Customer</label><span>${esc(o.customer_name || 'Guest')}</span></div>
         <div class="info-block"><label>Email</label><span>${esc(o.customer_email || '—')}</span></div>
-        <div class="info-block"><label>Phone</label><span>${esc(o.addr_phone || '—')}</span></div>
+        <div class="info-block"><label>Phone</label><span>${esc(savedAddress?.phone || o.addr_phone || '—')}</span></div>
         <div class="info-block"><label>Payment</label><span>${esc((o.payment_method || 'cod').toUpperCase())}</span></div>
         <div class="info-block" style="grid-column:1/-1">
           <label>Delivery Address</label><span>${esc(addressLine || '—')}</span>
@@ -190,33 +199,29 @@
       `;
 
       const shipmentEl = document.getElementById('modalShipment');
-      if (o.awb_number || o.shipment_id) {
-        shipmentEl.innerHTML = `
-          <div style="background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;font-size:13px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-              <div><strong>Shipment ID:</strong> ${esc(o.shipment_id || 'N/A')}</div>
-              <button class="btn-refresh-shipment" data-id="${o.id}" style="padding:4px 8px;font-size:11px;cursor:pointer;border-radius:6px;border:1px solid #cbd5e1;background:#fff;"><i class="fas fa-sync-alt"></i> Refresh</button>
-            </div>
-            <div><strong>AWB Code:</strong> <span style="font-family:monospace;font-weight:700;">${esc(o.awb_number || 'N/A')}</span></div>
-            <div><strong>Courier:</strong> ${esc(o.courier_name || 'N/A')}</div>
-            <div><strong>Shiprocket Status:</strong> ${esc(o.tracking_status || o.status || 'N/A')}</div>
-            ${o.estimated_delivery ? `<div><strong>Est. Delivery:</strong> ${fmtDate(o.estimated_delivery)}</div>` : ''}
-          </div>
-        `;
-        shipmentEl.querySelector('.btn-refresh-shipment')?.addEventListener('click', (e) => {
-          refreshTracking(o.id, e.currentTarget);
-        });
-      } else {
-        shipmentEl.innerHTML = `
-          <div style="background:#fffbe6;padding:12px;border-radius:8px;border:1px solid #ffe58f;font-size:13px;display:flex;justify-content:space-between;align-items:center;">
-            <span><i class="fas fa-exclamation-triangle" style="color:#faad14;"></i> Not yet pushed to Shiprocket</span>
-            <button class="btn-push-shipment" data-id="${o.id}" style="padding:4px 10px;font-size:12px;cursor:pointer;border-radius:6px;border:none;background:#667eea;color:#fff;"><i class="fas fa-paper-plane"></i> Book Shipment</button>
-          </div>
-        `;
-        shipmentEl.querySelector('.btn-push-shipment')?.addEventListener('click', (e) => {
-          pushShiprocket(o.id, e.currentTarget);
-        });
-      }
+      const details = o.shipping_job_details || {};
+      const parcel = details.parcel || o.shipping_snapshot?.parcel;
+      const active = ['queued', 'processing', 'retry'].includes(o.shipping_job_state);
+      const canBook = !active && o.shipping_job_state !== 'completed' &&
+        !['Payment Pending', 'Cancelled', 'RTO'].includes(o.status) && (o.payment_method === 'cod' || Boolean(o.payment_verified_at));
+      shipmentEl.innerHTML = `<div style="padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
+        <p><strong>${esc(shippingState(o))}</strong> <button type="button" id="reloadBooking">Refresh progress</button></p>
+        <p>AWB: ${esc(o.awb_number || 'Pending')} | Courier: ${esc(o.courier_name || 'Pending')}</p>
+        ${o.shipping_job_error ? `<p role="alert" style="color:#b91c1c">${esc(o.shipping_job_error)}</p>` : ''}
+        ${parcel ? `<p>Parcel: ${esc(parcel.weight)} kg | ${esc(parcel.length)} x ${esc(parcel.breadth)} x ${esc(parcel.height)} cm | Box: ${esc(details.packageCode || o.shipping_snapshot?.packageCode || 'Manual')}</p>` : ''}
+        ${details.packing?.stackCm ? `<p>Pack in one stack: ${esc(details.packing.stackCm.length)} x ${esc(details.packing.stackCm.breadth)} x ${esc(details.packing.stackCm.height)} cm before the outer box.</p>` : ''}
+        <p>${documentLink(details.labelUrl, 'Download label')} ${documentLink(details.manifestUrl, 'Download manifest')}</p>
+        ${!parcel && canBook ? `<p>Enter the measured final parcel:</p><div style="display:flex;gap:8px;flex-wrap:wrap">${['weight','length','breadth','height'].map(key => `<label>${key === 'weight' ? 'Weight (kg)' : key + ' (cm)'}<input id="parcel_${key}" type="number" min="${key === 'weight' ? '0.001' : '0.51'}" max="${key === 'weight' ? 100 : 300}" step="0.01" style="width:90px;display:block"></label>`).join('')}</div>` : ''}
+        ${canBook ? '<p><button type="button" id="resumeBooking">Queue / resume shipment</button></p>' : ''}
+        ${o.awb_number ? '<button type="button" id="refreshRemoteTracking">Refresh courier tracking</button>' : ''}
+        <p>For cancellation, cancel the shipment in Shiprocket and refresh its tracking here. Changing a local status does not cancel a pickup.</p>
+      </div>`;
+      document.getElementById('reloadBooking').addEventListener('click', () => openModal(o.id));
+      document.getElementById('refreshRemoteTracking')?.addEventListener('click', async e => { await refreshTracking(o.id, e.currentTarget); await openModal(o.id); });
+      document.getElementById('resumeBooking')?.addEventListener('click', e => {
+        const manualParcel = parcel ? undefined : Object.fromEntries(['weight','length','breadth','height'].map(key => [key, Number(document.getElementById('parcel_' + key).value)]));
+        pushShiprocket(o.id, e.currentTarget, manualParcel);
+      });
 
       const items = Array.isArray(o.items) ? o.items : [];
       document.getElementById('modalItems').innerHTML = items.map(it => `
@@ -229,7 +234,7 @@
         </div>
       `).join('');
 
-      const shipping = o.total - o.subtotal;
+      const shipping = o.shipping || 0;
       document.getElementById('modalTotals').innerHTML = `
         <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted)">
           <span>Subtotal</span><span>${fmtRupee(o.subtotal)}</span>
@@ -237,6 +242,7 @@
         <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-top:4px">
           <span>Shipping</span><span>${shipping > 0 ? fmtRupee(shipping) : 'FREE'}</span>
         </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:4px"><span>Discount</span><span>${fmtRupee(o.discount || 0)}</span></div>
         <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;margin-top:8px">
           <span>Total</span><span style="color:var(--green)">${fmtRupee(o.total)}</span>
         </div>

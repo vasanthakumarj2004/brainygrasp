@@ -120,7 +120,23 @@ router.get('/api/auth/me', authenticateToken, async (req, res) => {
 
 // 4. Save/Update User Profile
 const handleProfileSave = async (req, res) => {
+  const fields = { name: 100, gender: 30, phone: 24, address: 1000, city: 100, state: 100, pincode: 12, country: 80 };
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ error: 'Profile details are required' });
+  }
+  for (const [field, limit] of Object.entries(fields)) {
+    const value = req.body[field];
+    if (value != null && (typeof value !== 'string' || value.trim().length > limit)) {
+      return res.status(400).json({ error: `Invalid ${field}` });
+    }
+  }
   const { name, gender, phone, address, city, state, pincode, country } = req.body;
+  if (phone?.trim() && (!/^[+\d\s()-]+$/.test(phone) || !/^\d{7,15}$/.test(phone.replace(/\D/g, '')))) {
+    return res.status(400).json({ error: 'Enter a valid phone number with 7 to 15 digits' });
+  }
+  if (pincode?.trim() && (country?.trim() || 'India').toLowerCase() === 'india' && !/^[1-9]\d{5}$/.test(pincode.trim())) {
+    return res.status(400).json({ error: 'Enter a valid 6-digit Indian PIN code' });
+  }
 
   try {
     if (!name || !name.trim()) {

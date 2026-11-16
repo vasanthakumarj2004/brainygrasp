@@ -17,18 +17,29 @@
  *   payment.js    — POST /api/payment/create-order, /api/payment/verify
  *   admin.js      — All /api/admin/* endpoints
  *   affiliate.js  — All /api/affiliate/* and /api/admin/affiliate* endpoints
- *   shiprocket.js — POST /api/webhooks/shiprocket
+ *   shiprocket.js — POST /api/delivery-events
  */
 
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 // ── Startup validation ────────────────────────────────────────────────────────
-const REQUIRED_ENV = ['JWT_SECRET', 'DB_PASSWORD', 'ADMIN_USERNAME', 'ADMIN_PASSWORD'];
+const REQUIRED_ENV = ['JWT_SECRET', 'ADMIN_USERNAME', 'ADMIN_PASSWORD'];
+if (!process.env.DATABASE_URL) REQUIRED_ENV.push('DB_PASSWORD');
+if (process.env.NODE_ENV === 'production') REQUIRED_ENV.push('ALLOWED_ORIGINS');
 for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
     throw new Error(`❌ Missing required env var: ${key} must be set in .env`);
   }
+}
+
+// Live payments fail closed if their recovery/signing configuration is missing.
+if (process.env.RAZORPAY_KEY_ID?.startsWith('rzp_live_')) {
+  require('./paymentService').validateConfig(process.env);
+}
+if (process.env.SHIPROCKET_ENABLED === 'true') {
+  require('./shippingPolicy').shippingConfig(process.env);
+  require('./parcelPacking').packageProfiles(process.env);
 }
 
 const express = require('express');
@@ -83,7 +94,8 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
+app.post('/api/webhooks/razorpay', express.raw({ type: 'application/json', limit: '256kb' }), paymentRouter.webhook);
+app.use(express.json({ limit: '256kb' }));
 
 // ── Route mounting ────────────────────────────────────────────────────────────
 app.use('/', adminRouter);
@@ -216,6 +228,11 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
+
+    // Security migrations must succeed before accepting payment traffic.
+    await require('./paymentSchema').migratePayments(client);
+    await require('./shippingSchema').migrateShipping(client);
+    await require('./catalogMigration').migrateCatalog(client);
 
     // Migration columns
     const migrations = [
@@ -357,6 +374,7 @@ function normalizePhone(raw) {
   try {
     await initDBWithRetry();
     await initRedis();
+    require('./orderFulfillment').startShippingWorker();
     app.listen(port, '0.0.0.0', () => {
       console.log(`🚀 BrainyGrasp API running on http://localhost:${port}`);
       console.log(`🌐 Accessible from network devices at http://0.0.0.0:${port}`);

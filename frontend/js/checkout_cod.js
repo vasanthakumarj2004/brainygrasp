@@ -12,6 +12,9 @@ let activeTotal = 0;
 let activeSubtotal = 0;
 let shipping    = 0;
 let promoDiscount = 0;
+let appliedPromoCode = '';
+let paymentBusy = false;
+let serverQuote = null;
 let currentTab  = 'profile'; // 'profile' | 'new'
 let userProfile = null;
 
@@ -35,6 +38,10 @@ function clearMsg() {
 
 // ── Tab Switching ─────────────────────────────────────────────
 window.switchTab = function(tab) {
+  if (tab === 'new' && (readPaymentAttempt() || readCodAttempt())) {
+    showMsg('The delivery address is saved with your pending checkout. Resume that checkout to check its status.', 'info');
+    return;
+  }
   currentTab = tab;
   document.getElementById('tabProfile').classList.toggle('active', tab === 'profile');
   document.getElementById('tabNew').classList.toggle('active', tab === 'new');
@@ -95,9 +102,10 @@ function renderSummary() {
     return false;
   }
 
-  activeSubtotal = activeCart.reduce((s, i) => s + i.price * (i.quantity || 1), 0);
-  shipping = activeSubtotal >= 999 ? 0 : 60;
-  activeTotal = activeSubtotal + shipping - promoDiscount;
+  activeSubtotal = serverQuote?.subtotal ?? activeCart.reduce((s, i) => s + i.price * (i.quantity || 1), 0);
+  shipping = serverQuote?.shipping ?? (activeSubtotal >= 999 ? 0 : 60);
+  promoDiscount = serverQuote?.discount ?? promoDiscount;
+  activeTotal = serverQuote?.total ?? (activeSubtotal + shipping - promoDiscount);
   if (activeTotal < 0) activeTotal = 0;
 
   const itemsHTML = activeCart.map(item => `
@@ -131,13 +139,17 @@ function renderSummary() {
 
 // ── Promo Code (stub — extend with real API) ───────────────────
 window.applyPromo = function() {
+  if (paymentBusy || readPaymentAttempt() || readCodAttempt()) { showMsg('Resume your existing checkout before changing the promo code.', 'info'); return; }
+  serverQuote = null;
   const code   = document.getElementById('promoInput').value.trim().toUpperCase();
   const msgEl  = document.getElementById('promoMsg');
   const PROMOS = { 'BRAINY10': 10, 'BRAINY15': 15, 'FLAT50': 50 };
 
-  if (!code) { msgEl.style.display = 'none'; return; }
+  appliedPromoCode = '';
+  if (!code) { promoDiscount = 0; msgEl.style.display = 'none'; renderSummary(); return; }
 
-  if (PROMOS[code]) {
+  if (Object.hasOwn(PROMOS, code)) {
+    appliedPromoCode = code;
     // percentage if ≤ 20, flat otherwise
     if (PROMOS[code] <= 20) {
       promoDiscount = Math.round(activeSubtotal * PROMOS[code] / 100);
@@ -230,60 +242,136 @@ async function loadCart(token) {
 }
 
 // ── Save Address → Create Order ────────────────────────────────
-async function placeOrder(token, payMethod, paymentId = null) {
-  const addr = getAddress();
-  if (!validateAddress(addr)) return null;
-
-  const btn = document.getElementById('btnPlaceOrder');
-  btn.disabled  = true;
-  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin spinner"></i> Processing…';
-
+async function apiRequest(path, token, body) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 25000);
   try {
-    // 1. Save address
-    const aRes = await fetch(`${API_BASE}/api/addresses`, {
-      method : 'POST',
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: body === undefined ? 'GET' : 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body   : JSON.stringify({
-        full_name: addr.name, phone: addr.phone,
-        line1: addr.line1, city: addr.city,
-        state: addr.state, pincode: addr.pincode, is_default: false
-      })
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: controller.signal, cache: 'no-store'
     });
-    if (!aRes.ok) throw new Error('Failed to save delivery address.');
-    const aData = await aRes.json();
-
-    // 2. Place order
-    const affiliateRef = localStorage.getItem('bg_ref') || null;
-    const oRes = await fetch(`${API_BASE}/api/orders`, {
-      method : 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body   : JSON.stringify({
-        address_id    : aData.id,
-        items         : activeCart,
-        subtotal      : activeSubtotal,
-        total         : activeTotal,
-        payment_method: payMethod,
-        payment_id    : paymentId,
-        affiliate_ref : affiliateRef
-      })
-    });
-    if (!oRes.ok) throw new Error('Failed to create order. Please try again.');
-    const order = await oRes.json();
-
-    // 3. Clear cart everywhere
-    if (typeof clearCart === 'function') clearCart();
-    localStorage.removeItem('bg_cart');
-    activeCart = [];
-
-    return order.id;
-
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(data.error || 'Checkout request failed. Please try again.');
+      err.status = res.status;
+      err.checkoutRejected = data.checkout_rejected === true;
+      throw err;
+    }
+    return data;
   } catch (err) {
-    console.error('Order error:', err);
-    showMsg('❌ ' + err.message);
-    btn.disabled  = false;
-    btn.innerHTML = currentPayMethod() === 'cod'
-      ? '<i class="fas fa-check-circle"></i> Place Order (Cash on Delivery)'
-      : '<i class="fas fa-bolt"></i> Pay Now with Razorpay';
+    if (err.name === 'AbortError') throw new Error('The request timed out. Check the same order again before making another payment.');
+    throw err;
+  } finally { clearTimeout(timer); }
+}
+
+function paymentStorageKey() {
+  return userProfile?.id ? `bg_payment_checkout_${userProfile.id}` : null;
+}
+function readPaymentAttempt() {
+  const key = paymentStorageKey();
+  if (!key) return null;
+  try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; }
+}
+function codStorageKey() { return userProfile?.id ? `bg_cod_checkout_${userProfile.id}` : null; }
+function readCodAttempt() {
+  const key = codStorageKey();
+  try { return key ? JSON.parse(localStorage.getItem(key) || 'null') : null; } catch { return null; }
+}
+function savePaymentAttempt(attempt) {
+  const key = paymentStorageKey();
+  if (!key) throw new Error('Please sign in again before making a payment.');
+  localStorage.setItem(key, JSON.stringify(attempt));
+  restoreSavedAddress(attempt);
+}
+function restoreSavedAddress(attempt) {
+  const fields = { codName: 'name', codPhone: 'phone', codLine1: 'line1', codCity: 'city', codState: 'state', codPincode: 'pincode' };
+  for (const [id, key] of Object.entries(fields)) {
+    const field = document.getElementById(id);
+    if (attempt?.address) field.value = attempt.address[key] || '';
+    field.readOnly = Boolean(attempt);
+  }
+  document.getElementById('promoInput').disabled = Boolean(attempt);
+  document.getElementById('tabNew').disabled = Boolean(attempt);
+  document.querySelectorAll('input[name="payMethod"]').forEach(radio => { radio.disabled = Boolean(attempt); });
+  if (attempt) window.switchTab('profile');
+}
+function resetPaymentButton() {
+  paymentBusy = false;
+  const btn = document.getElementById('btnPlaceOrder');
+  btn.disabled = false;
+  updatePayBtn();
+  if (readPaymentAttempt()) btn.textContent = 'Resume / Check Existing Payment';
+  if (readCodAttempt()) btn.textContent = 'Resume / Confirm Existing COD Order';
+}
+async function saveAddress(token, addr) {
+  return apiRequest('/api/addresses', token, {
+    full_name: addr.name, phone: addr.phone, line1: addr.line1,
+    city: addr.city, state: addr.state, pincode: addr.pincode
+  });
+}
+async function refreshCartAfterOrder(token) {
+  // The server removes only purchased quantities. Never sync an empty cart back.
+  localStorage.removeItem('bg_cart');
+  try {
+    const cart = await apiRequest('/api/cart', token);
+    localStorage.setItem('bg_cart', JSON.stringify(cart));
+  } catch { /* The next page will fetch the server cart. */ }
+}
+async function finishOnlineOrder(token, order) {
+  const key = paymentStorageKey();
+  if (key) localStorage.removeItem(key);
+  paymentBusy = true;
+  document.getElementById('btnPlaceOrder').disabled = true;
+  await refreshCartAfterOrder(token);
+  showSuccess(order.id, 'Online payment confirmed. Your order is confirmed.');
+}
+function showSavedQuote(order) {
+  serverQuote = order;
+  activeCart = order.items;
+  appliedPromoCode = order.promo_code || '';
+  renderSummary();
+}
+
+async function placeOrder(token, payMethod) {
+  if (payMethod !== 'cod' || paymentBusy) return null;
+  if (readPaymentAttempt()) {
+    showMsg('An online checkout is saved. Resume it and check its payment status before placing another order.');
+    return null;
+  }
+  let attempt = readCodAttempt();
+  const addr = attempt?.address || getAddress();
+  if (!validateAddress(addr)) return null;
+  paymentBusy = true;
+  const btn = document.getElementById('btnPlaceOrder');
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+  try {
+    if (!attempt) {
+      const address = await saveAddress(token, addr);
+      attempt = { address: addr, items: activeCart, total: activeTotal, request: {
+        checkout_key: crypto.randomUUID(), address_id: address.id,
+        items: activeCart.map(item => ({ id: item.id, quantity: item.quantity || 1 })),
+        promo_code: appliedPromoCode, expected_total: activeTotal,
+        payment_method: 'cod', affiliate_ref: localStorage.getItem('bg_ref') || null
+      } };
+      if (!codStorageKey()) throw new Error('Please sign in again before ordering.');
+      localStorage.setItem(codStorageKey(), JSON.stringify(attempt));
+      restoreSavedAddress(attempt);
+    }
+    const order = await apiRequest('/api/orders', token, attempt.request);
+    localStorage.removeItem(codStorageKey());
+    await refreshCartAfterOrder(token);
+    activeCart = [];
+    return order.id;
+  } catch (err) {
+    if (err.status === 400 || err.checkoutRejected) {
+      localStorage.removeItem(codStorageKey());
+      restoreSavedAddress(null);
+    }
+    showMsg(err.message);
+    resetPaymentButton();
     return null;
   }
 }
@@ -307,7 +395,11 @@ function showSuccess(orderId, payNote) {
 
 // ── Payment Method UI Toggle ───────────────────────────────────
 function updatePayBtn() {
-  const method = currentPayMethod();
+  const saved = readPaymentAttempt();
+  const savedCod = readCodAttempt();
+  if (saved) document.querySelector('input[name="payMethod"][value="razorpay"]').checked = true;
+  if (savedCod) document.querySelector('input[name="payMethod"][value="cod"]').checked = true;
+  const method = saved ? 'razorpay' : savedCod ? 'cod' : currentPayMethod();
   const btn    = document.getElementById('btnPlaceOrder');
   if (method === 'razorpay') {
     btn.className   = 'btn-place btn-rzp';
@@ -320,90 +412,94 @@ function updatePayBtn() {
     document.getElementById('codInfoBox').style.display = 'flex';
     document.getElementById('rzpInfoBox').style.display = 'none';
   }
+  if (saved) btn.textContent = 'Resume / Check Existing Payment';
+  if (savedCod) btn.textContent = 'Resume / Confirm Existing COD Order';
 }
 
 // ── Razorpay Flow ──────────────────────────────────────────────
 async function startRazorpay(token) {
-  const addr = getAddress();
+  if (paymentBusy) return;
+  if (readCodAttempt()) { showMsg('Resume your existing COD order before starting another checkout.'); return; }
+  let attempt = readPaymentAttempt();
+  const addr = attempt?.address || getAddress();
   if (!validateAddress(addr)) return;
-
+  paymentBusy = true;
   const btn = document.getElementById('btnPlaceOrder');
-  btn.disabled  = true;
-  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin spinner"></i> Initializing Payment…';
-
+  btn.disabled = true;
+  btn.textContent = 'Checking payment...';
   try {
-    const rzpRes = await fetch(`${API_BASE}/api/payment/create-order`, {
-      method : 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body   : JSON.stringify({ amount: activeTotal })
-    });
-    const rzpOrder = await rzpRes.json();
-
-    if (!rzpOrder.orderId) {
-      showMsg('❌ Could not initialize payment. Please check Razorpay configuration.');
-      btn.disabled  = false;
-      btn.innerHTML = '<i class="fas fa-bolt"></i> Pay Now with Razorpay';
+    if (typeof Razorpay !== 'function') throw new Error('The payment window could not load. Please refresh and try again.');
+    if (!attempt) {
+      const address = await saveAddress(token, addr);
+      attempt = {
+        address: addr,
+        request: {
+          checkout_key: crypto.randomUUID(), address_id: address.id,
+          items: activeCart.map(item => ({ id: item.id, quantity: item.quantity || 1 })),
+          promo_code: appliedPromoCode, affiliate_ref: localStorage.getItem('bg_ref') || null
+        }
+      };
+      // Persist before sending so network retries use the same request key.
+      savePaymentAttempt(attempt);
+    }
+    let order = attempt.id
+      ? await apiRequest(`/api/payment/orders/${attempt.id}`, token)
+      : await apiRequest('/api/payment/create-order', token, attempt.request);
+    attempt.id = order.id;
+    savePaymentAttempt(attempt);
+    // A lost create-order response may belong to an already completed payment.
+    if (!order.paid) order = await apiRequest(`/api/payment/orders/${order.id}`, token);
+    if (order.paid) { await finishOnlineOrder(token, order); return; }
+    showSavedQuote(order);
+    if (order.pending) {
+      showMsg(`Payment for Order #${order.id} is awaiting confirmation. Check its status again; please do not pay again.`, 'info');
+      resetPaymentButton();
       return;
     }
-
-    const options = {
-      key         : rzpOrder.key,
-      amount      : rzpOrder.amount,
-      currency    : rzpOrder.currency,
-      name        : 'BrainyGrasp',
-      description : 'Educational Toys Purchase',
-      image       : 'images/ChatGPT Image May 9, 2026, 10_43_38 AM.png',
-      order_id    : rzpOrder.orderId,
-      prefill     : {
-        name   : addr.name,
-        contact: addr.phone,
-        email  : userProfile?.email || ''
-      },
-      theme       : { color: '#667eea' },
-      modal       : {
-        ondismiss: () => {
-          showMsg('Payment cancelled. You can try again.', 'info');
-          btn.disabled  = false;
-          btn.innerHTML = '<i class="fas fa-bolt"></i> Pay Now with Razorpay';
+    let completing = false;
+    const rzp = new Razorpay({
+      key: order.key, amount: order.amount, currency: order.currency, order_id: order.orderId,
+      name: 'BrainyGrasp', description: `Order #${order.id}`,
+      prefill: { name: addr.name, contact: addr.phone, email: userProfile?.email || '' },
+      theme: { color: '#667eea' },
+      modal: { ondismiss: () => {
+        if (completing) return;
+        showMsg(`Checkout closed. Resume Order #${order.id} to check its status or retry.`, 'info');
+        resetPaymentButton();
+      } },
+      handler: async response => {
+        completing = true;
+        paymentBusy = true;
+        btn.disabled = true;
+        btn.textContent = 'Verifying payment...';
+        try {
+          const verified = await apiRequest('/api/payment/verify', token, {
+            order_id: order.id, razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id, razorpay_signature: response.razorpay_signature
+          });
+          if (verified.paid) { await finishOnlineOrder(token, verified); return; }
+          showMsg(`Payment for Order #${order.id} is awaiting capture. Check its status again; please do not pay again.`, 'info');
+        } catch (err) {
+          showMsg(`${err.message} Order #${order.id}; payment reference: ${response.razorpay_payment_id}. Resume this order to check its status.`);
         }
-      },
-      handler: async (response) => {
-        btn.innerHTML = '<i class="fas fa-circle-notch fa-spin spinner"></i> Verifying…';
-
-        const verRes = await fetch(`${API_BASE}/api/payment/verify`, {
-          method : 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body   : JSON.stringify({
-            razorpay_order_id  : response.razorpay_order_id,
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_signature : response.razorpay_signature
-          })
-        });
-        const verify = await verRes.json();
-
-        if (verify.success) {
-          const orderId = await placeOrder(token, 'razorpay', verify.payment_id);
-          if (orderId) showSuccess(orderId, '✅ Online payment successful! Order confirmed.');
-        } else {
-          showMsg('❌ Payment verification failed. Contact support with your payment ID.');
-          btn.disabled  = false;
-          btn.innerHTML = '<i class="fas fa-bolt"></i> Pay Now with Razorpay';
-        }
+        resetPaymentButton();
       }
-    };
-
-    const rzp = new Razorpay(options);
+    });
+    rzp.on('payment.failed', () => {
+      showMsg(`The payment attempt did not complete. You can retry in the payment window, or resume Order #${order.id} later.`);
+    });
     rzp.open();
-
   } catch (err) {
-    console.error('Razorpay init error:', err);
-    showMsg('❌ Payment initialization failed. Please try again.');
-    btn.disabled  = false;
-    btn.innerHTML = '<i class="fas fa-bolt"></i> Pay Now with Razorpay';
+    if (!attempt?.id && (err.status === 400 || err.checkoutRejected)) {
+      const key = paymentStorageKey();
+      if (key) localStorage.removeItem(key);
+      restoreSavedAddress(null);
+    }
+    showMsg(err.message);
+    resetPaymentButton();
   }
 }
 
-// ── INIT ───────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
 
   // 1. Auth gate
@@ -421,9 +517,37 @@ document.addEventListener('DOMContentLoaded', async () => {
   ]);
   if (profileOk === false) return;
 
+  // Recover after reload even when the webhook already removed purchased cart items.
+  const savedAttempt = readPaymentAttempt();
+  const savedCod = readCodAttempt();
+  if (savedCod) {
+    restoreSavedAddress(savedCod);
+    activeCart = savedCod.items || [];
+    serverQuote = { total: savedCod.total };
+    updatePayBtn();
+    showMsg('A COD checkout is saved. Resume it to confirm the same order without creating a duplicate.', 'info');
+  }
+  if (savedAttempt) {
+    restoreSavedAddress(savedAttempt);
+    const radio = document.querySelector('input[name="payMethod"][value="razorpay"]');
+    if (radio) radio.checked = true;
+    updatePayBtn();
+    if (savedAttempt.id) {
+      try {
+        const order = await apiRequest(`/api/payment/orders/${savedAttempt.id}`, token);
+        if (order.paid) { await finishOnlineOrder(token, order); return; }
+        showSavedQuote(order);
+        showMsg(`Resume your saved Order #${order.id} to check its payment status. Its basket and delivery address are already saved.`, 'info');
+      } catch (err) { showMsg(err.message); }
+    }
+  }
+
+
   // 3. Render order summary
   const hasItems = renderSummary();
-  if (!hasItems) return; // empty cart — button already disabled
+  if (!hasItems && !savedAttempt && !savedCod) return; // empty cart
+
+  if (savedAttempt || savedCod) resetPaymentButton();
 
   // 4. Payment method radio toggle
   document.querySelectorAll('input[name="payMethod"]').forEach(r => {
@@ -432,10 +556,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 5. Place Order button - Shows confirmation modal for COD
   document.getElementById('btnPlaceOrder').addEventListener('click', async () => {
+    if (paymentBusy) return;
     clearMsg();
-    const method = currentPayMethod();
+    const method = readPaymentAttempt() ? 'razorpay' : readCodAttempt() ? 'cod' : currentPayMethod();
 
-    const addr = getAddress();
+    const addr = readPaymentAttempt()?.address || readCodAttempt()?.address || getAddress();
     if (!validateAddress(addr)) return;
 
     if (method === 'cod') {

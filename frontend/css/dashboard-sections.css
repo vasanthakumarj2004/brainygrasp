@@ -1,0 +1,37 @@
+[hidden] { display: none !important; }
+.dashboard-main { min-width: 0; max-height: none; overflow: visible; display: grid; gap: 25px; }
+main.dashboard-main { margin-top: 0 !important; }
+#liveTrackingSection { scroll-margin-top: 90px; }
+.dashboard-sidebar { max-height: none; overflow: visible; }
+.section-title { font-family: 'Fredoka', sans-serif; font-size: 1.35rem; color: #764ba2; margin: 0 0 18px; }
+.section-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.section-header .section-title { margin: 0; }
+.section-header .btn { width: auto; }
+.section-description, .feedback, .empty-state { color: #636e72; font-size: .9rem; }
+.feedback { margin: 12px 0; }
+.feedback.error { color: #a52b3b; }
+.empty-state { text-align: center; padding: 25px 10px; }
+.orders-panel > .card { box-shadow: none; padding: 0; }
+.order-topline { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.order-price { font-weight: 800; font-size: 1.15rem; }
+.order-address { margin-top: 12px; padding-top: 12px; border-top: 1px solid #ddd; font-size: .85rem; color: #636e72; }
+.order-track { margin-top: 14px; }
+.detail-value, .order-card, .tracking-meta, #trackingDetails { overflow-wrap: anywhere; }
+.status-exception { background: #fff0e4; color: #914800; }
+.tracking-steps::before { left: 10%; right: 10%; }
+.tracking-progress-line { left: 10%; right: auto; }
+.tracking-header { flex-wrap: wrap; gap: 10px; }
+.tracking-note { margin: 12px 0; color: #636e72; }
+.tracking-meta { display: grid; gap: 8px; }
+.btn:disabled { opacity: .6; cursor: wait; transform: none; }
+button:focus-visible, a:focus-visible { outline: 3px solid #764ba2; outline-offset: 3px; }
+.gender-option input { display: block; position: absolute; opacity: 0; width: 1px; height: 1px; }
+.gender-option input:focus-visible + label { outline: 3px solid #764ba2; outline-offset: 3px; }
+@media (max-width: 600px) {
+    .dashboard-main { gap: 18px; }
+    .card { padding: 18px; }
+    .section-header .btn { font-size: .8rem; padding: 9px 12px; }
+    .tracking-container { padding: 12px; }
+    .tracking-steps::before { left: 10%; right: 10%; }
+    .tracking-progress-line { left: 10%; right: auto; }
+}

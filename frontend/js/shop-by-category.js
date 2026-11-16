@@ -1,10 +1,12 @@
 // === Shop By Category Architecture ===
+let refreshCategoryProducts;
 function initShopByCategory() {
+  if (refreshCategoryProducts) { refreshCategoryProducts(); return; }
   const grid = document.getElementById('shopByCategoryGrid');
   if (!grid) return;
 
-  const allProducts = [...products.trending, ...products.bestsellers, ...products.newlaunches, ...products.bundles];
-  const uniqueProducts = Array.from(new Map(allProducts.map(item => [item.id, item])).values());
+  const allProducts = window.catalogProducts || [];
+  let uniqueProducts = Array.from(new Map(allProducts.map(item => [item.id, item])).values());
   
   let currentProducts = [...uniqueProducts];
   let currentFilters = {
@@ -36,10 +38,11 @@ function initShopByCategory() {
   function createCheckboxes(containerId, items, filterType) {
     const container = document.getElementById(containerId);
     if (!container) return;
+    const selected = new Set(Array.from(container.querySelectorAll('input:checked')).map(input => input.value));
     container.innerHTML = items.map(item => `
       <label class="filter-checkbox">
-        <input type="checkbox" value="${item}" data-filter-type="${filterType}">
-        <span class="checkmark"></span> ${item}
+        <input type="checkbox" value="${catalogEscape(item)}" data-filter-type="${filterType}" ${selected.has(item) ? 'checked' : ''}>
+        <span class="checkmark"></span> ${catalogEscape(item)}
       </label>
     `).join('');
   }
@@ -51,7 +54,7 @@ function initShopByCategory() {
 
   const catParamBox = urlParams.get('category');
   if (catParamBox) {
-    const targetCb = document.querySelector(`#catFilterCategories input[value="${catParamBox}"]`);
+    const targetCb = Array.from(document.querySelectorAll('#catFilterCategories input')).find(input => input.value === catParamBox);
     if(targetCb) targetCb.checked = true;
   }
 
@@ -62,7 +65,7 @@ function initShopByCategory() {
   }
 
   function applyFiltersAndSort() {
-    let filtered = uniqueProducts;
+    let filtered = [...uniqueProducts];
 
 // Sidebar array filters
     const selectedCategories = Array.from(document.querySelectorAll('#catFilterCategories input:checked')).map(cb => cb.value);
@@ -82,7 +85,7 @@ function initShopByCategory() {
 
     // Age Pills
     if (currentFilters.ages.length > 0) {
-      filtered = filtered.filter(p => currentFilters.ages.includes(p.ageGroup || p.age_group));
+      filtered = filtered.filter(p => currentFilters.ages.some(age => productMatchesAge(p, age)));
     }
 
     // Price
@@ -115,7 +118,7 @@ function initShopByCategory() {
       
       // Clear sidebar checkboxes if category selected from top
       document.querySelectorAll('#catFilterSidebar input[type="checkbox"]').forEach(cb => cb.checked = false);
-      const targetCb = document.querySelector(`#catFilterCategories input[value="${cat}"]`);
+      const targetCb = Array.from(document.querySelectorAll('#catFilterCategories input')).find(input => input.value === cat);
       if(targetCb) targetCb.checked = true;
       
       applyFiltersAndSort();
@@ -238,10 +241,25 @@ function initShopByCategory() {
     });
   }
 
+  let initialCategoryApplied = uniqueProducts.length > 0;
+  refreshCategoryProducts = (success = true) => {
+    uniqueProducts = [...(window.catalogProducts || [])];
+    if (!success) { countEl.textContent = 'Products unavailable'; return; }
+    createCheckboxes('catFilterCategories', [...new Set(uniqueProducts.map(p => p.category).filter(Boolean))], 'categoryList');
+    createCheckboxes('catFilterSkills', [...new Set(uniqueProducts.flatMap(p => p.skills || []))], 'skills');
+    createCheckboxes('catFilterThemes', [...new Set(uniqueProducts.map(p => p.theme).filter(Boolean))], 'themes');
+    if (!initialCategoryApplied && catParam) {
+      const input = Array.from(document.querySelectorAll('#catFilterCategories input')).find(input => input.value === catParam);
+      if (input) input.checked = true;
+    }
+    initialCategoryApplied = true;
+    applyFiltersAndSort();
+  };
   applyFiltersAndSort();
 }
 
-document.addEventListener('productsUpdated', () => {
-  initShopByCategory();
+document.addEventListener('productsUpdated', event => {
+  if (refreshCategoryProducts) refreshCategoryProducts(event.detail?.success);
+  else if (event.detail?.success) initShopByCategory();
 });
 

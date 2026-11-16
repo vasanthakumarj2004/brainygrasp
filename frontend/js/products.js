@@ -11,6 +11,20 @@ let products = {
 // Expose on window object
 window.products = products;
 
+let catalogProducts = [];
+window.catalogProducts = catalogProducts;
+function catalogEscape(value) {
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function productImageUrl(value) {
+  const fallback = '/images/product-placeholder.svg';
+  if (typeof value !== 'string' || !value.trim()) return fallback;
+  try {
+    const url = new URL(value, window.location.origin);
+    return ['https:', ...(window.location.protocol === 'http:' ? ['http:'] : [])].includes(url.protocol) && !url.username && !url.password ? url.href : fallback;
+  } catch { return fallback; }
+}
+
 // === Create Product Card HTML ===
 function createProductCard(product) {
   if (!product) return '';
@@ -24,7 +38,7 @@ function createProductCard(product) {
   const badgeText = product.badge === 'bestseller' ? 'Bestseller' : product.badge === 'new' ? 'New Launch' : product.badge ? product.badge : 'Featured';
   
   const reviews = Number(product.reviews) || 0;
-  const reviewsHTML = reviews >= 0 
+  const reviewsHTML = reviews > 0 
     ? `<div class="product-reviews">
         <div class="stars">
           <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star-half-alt"></i>
@@ -36,35 +50,66 @@ function createProductCard(product) {
   const ageText = product.age || product.ageGroup || '3+ Years';
 
   return `
-    <div class="product-card advanced-card" data-id="${product.id}" data-age="${product.ageGroup || ''}" data-category="${product.category || ''}" data-skills='${JSON.stringify(product.skills || [])}' data-theme="${product.theme || ''}" data-type="${product.type || ''}" data-price="${price}" data-date="${product.launchDate || ''}" data-sales="${product.sales || 0}">
-      ${product.badge ? `<span class="adv-badge ${badgeClass}">${badgeText}</span>` : ''}
+    <div class="product-card advanced-card" data-id="${catalogEscape(product.id)}" data-age="${catalogEscape(product.ageGroup || '')}" data-category="${catalogEscape(product.category || '')}" data-skills="${catalogEscape(JSON.stringify(product.skills || []))}" data-theme="${catalogEscape(product.theme || '')}" data-type="${catalogEscape(product.type || '')}" data-price="${price}" data-date="${catalogEscape(product.launchDate || '')}" data-sales="${Number(product.sales) || 0}">
+      ${product.badge ? `<span class="adv-badge ${badgeClass}">${catalogEscape(badgeText)}</span>` : ''}
       <div class="product-share">
         <button class="share-btn"><i class="fas fa-share-alt"></i></button>
       </div>
       <div class="product-image">
-        <img src="${product.image || 'https://via.placeholder.com/400x300?text=No+Image'}" alt="${product.name || 'Product'}" loading="lazy" onerror="this.src='https://via.placeholder.com/400x300?text=No+Image'">
+        <img src="${catalogEscape(productImageUrl(product.image))}" alt="${catalogEscape(product.name || 'Product')}" loading="lazy" onerror="this.onerror=null;this.src='/images/product-placeholder.svg'">
       </div>
       <div class="product-info">
-        <div class="product-age-pill">Ages: ${ageText}</div>
-        <h3 class="product-name">${product.name || 'Product'}</h3>
+        <div class="product-age-pill">Ages: ${catalogEscape(ageText)}</div>
+        <h3 class="product-name">${catalogEscape(product.name || 'Product')}</h3>
+        ${product.details?.subtitle ? `<p class="product-subtitle">${catalogEscape(product.details.subtitle)}</p>` : ''}
         
         <div class="product-price-row">
           <span class="price-current">&#8377;${price.toLocaleString('en-IN')}</span>
           ${originalPrice > price ? `<span class="price-original">&#8377;${originalPrice.toLocaleString('en-IN')}</span>` : ''}
-          ${saveText && saveText !== '0%' ? `<span class="price-save">Save ${saveText}</span>` : ''}
+          ${saveText && saveText !== '0%' ? `<span class="price-save">Save ${catalogEscape(saveText)}</span>` : ''}
         </div>
         
         ${reviewsHTML}
         
         <div class="promo-box">
-          ${product.offer || 'Buy any 2 | Get FLAT 10% OFF'}<br>
-          <span class="promo-code">Use Code: BYOB10</span>
+          ${catalogEscape(product.offer || '')}
         </div>
         
-        <button class="add-to-cart-btn btn-peach"><i class="fas fa-shopping-bag"></i> Add to Cart</button>
+        <button class="add-to-cart-btn btn-peach" ${product.stock_quantity === 0 ? 'disabled' : ''}><i class="fas fa-shopping-bag"></i> ${product.stock_quantity === 0 ? 'Out of stock' : 'Add to Cart'}</button>
       </div>
     </div>
   `;
+}
+
+// Shared details for the catalog quick view and search result dialog.
+function productDetailsHTML(product) {
+  const d = product.details || {};
+  const list = (title, items) => Array.isArray(items) && items.length
+    ? `<h3>${title}</h3><ul>${items.map(item => `<li>${catalogEscape(item)}</li>`).join('')}</ul>` : '';
+  return `${d.subtitle ? `<p><strong>${catalogEscape(d.subtitle)}</strong></p>` : ''}
+    ${d.description ? `<p>${catalogEscape(d.description)}</p>` : ''}
+    ${list("What's included", d.includes)}
+    ${list('Skills developed', product.skills)}
+    ${d.categories?.length ? `<p><strong>Word categories:</strong> ${catalogEscape(d.categories.join(', '))}</p>` : ''}
+    <dl class="product-specifications">
+      ${product.category ? `<dt>Category</dt><dd>${catalogEscape(product.category)}</dd>` : ''}
+      ${Number.isInteger(product.stock_quantity) ? `<dt>Availability</dt><dd>${product.stock_quantity > 0 ? 'In stock' : 'Out of stock'}</dd>` : ''}
+      ${d.weight_g ? `<dt>Product weight</dt><dd>${Number(d.weight_g)} g</dd>` : ''}
+      ${d.covered_weight_g ? `<dt>With extra cover</dt><dd>${Number(d.covered_weight_g)} g</dd>` : ''}
+      ${d.dimensions_inches?.length === 3 ? `<dt>Dimensions (L × W × H)</dt><dd>${d.dimensions_inches.map(Number).join(' × ')} inches</dd>` : ''}
+    </dl>`;
+}
+
+function productMatchesAge(product, selected) {
+  if (!selected || selected === 'all') return true;
+  if (product.ageGroup === selected || product.age_group === selected) return true;
+  const minimum = product.details?.age_min;
+  if (!Number.isFinite(minimum)) return false;
+  const maximum = product.details?.age_max ?? Infinity;
+  // Existing navigation uses representative age bands (3–5, 6–7, 8+).
+  const bands = { '0-3': [0, 3], '3+': [3, 5], '6+': [6, 7], '8+': [8, Infinity] };
+  const band = bands[selected];
+  return !!band && minimum <= band[1] && maximum >= band[0];
 }
 
 // === Render Products ===
@@ -76,7 +121,7 @@ function renderProducts(gridId, productList, errorMessage) {
     grid.innerHTML = `
       <div class="products-status-box error-status" style="grid-column: 1 / -1; text-align: center; padding: 40px 20px; color: #ef4444; background: rgba(239, 68, 68, 0.05); border-radius: 12px; border: 1px dashed rgba(239, 68, 68, 0.2); width: 100%;">
         <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 12px; display: block;"></i>
-        <p style="font-size: 1.1rem; font-weight: 600; margin: 0;">${errorMessage}</p>
+        <p style="font-size: 1.1rem; font-weight: 600; margin: 0;">${catalogEscape(errorMessage)}<br><button type="button" data-retry-catalog>Retry loading products</button></p>
       </div>
     `;
     return;
@@ -113,12 +158,12 @@ function renderAllGrids() {
     if (activeTab && typeof activeTab.click === 'function') {
       activeTab.click();
     } else {
-      renderProducts('handpickedGrid', products.bestsellers);
+      renderProducts('handpickedGrid', catalogProducts);
     }
   }
 
   if (document.getElementById('youMayAlsoLikeGrid')) {
-    renderProducts('youMayAlsoLikeGrid', products.bestsellers);
+    renderProducts('youMayAlsoLikeGrid', catalogProducts);
   }
   if (document.getElementById('recentlyViewedGrid')) {
     renderProducts('recentlyViewedGrid', products.newlaunches);
@@ -149,85 +194,60 @@ function normalizeProduct(p) {
     groupName:     p.group_name  || p.groupName   || null,
     sales:         Number(p.sales)   || 0,
     reviews:       Number(p.reviews) || 0,
+    skills:        Array.isArray(p.skills) ? p.skills.filter(s => typeof s === 'string') : [],
   };
 }
 
-// === Fetch from DB Backend ONLY ===
-async function fetchProductsFromDB() {
+// Refresh visible pages without duplicating requests or resetting filters when unchanged.
+let catalogRequest = null;
+let catalogSignature = null;
+let catalogLastAttempt = 0;
+function fetchProductsFromDB() {
+  if (catalogRequest) return catalogRequest;
+  catalogLastAttempt = Date.now();
+  catalogRequest = loadCatalog().finally(() => { catalogRequest = null; });
+  return catalogRequest;
+}
+async function loadCatalog() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const apiBase = (window.BG_CONFIG && window.BG_CONFIG.API_BASE) || '';
-    let res;
-
-    try {
-      res = await fetch(`${apiBase}/api/products`);
-    } catch (e1) {
-      res = await fetch('/api/products');
-    }
-
-    if (!res || !res.ok) {
-      const fallbackRes = await fetch('/api/products').catch(() => null);
-      if (fallbackRes && fallbackRes.ok) {
-        res = fallbackRes;
-      }
-    }
-    
-    if (!res || !res.ok) {
-      throw new Error(`API returned status ${res ? res.status : 'failed'}`);
-    }
-    
-    const rawData = await res.json();
-
-    // Normalize every product row to camelCase immediately after fetch
-    const data = Array.isArray(rawData) ? rawData.map(normalizeProduct) : rawData;
-
-    if (Array.isArray(data)) {
-      const trending = data.filter(p => p.group_name === 'trending'  || p.groupName === 'trending');
-      const bestsellers = data.filter(p => p.group_name === 'bestsellers' || p.groupName === 'bestsellers');
-      const newlaunches = data.filter(p => p.group_name === 'newlaunches' || p.groupName === 'newlaunches' || p.badge === 'new');
-      const bundles = data.filter(p => p.group_name === 'bundles' || p.groupName === 'bundles' || p.type === 'Bundles');
-
-      products.trending = trending.length > 0 ? trending : data;
-      products.bestsellers = bestsellers.length > 0 ? bestsellers : data;
-      products.newlaunches = newlaunches.length > 0 ? newlaunches : data;
-      products.bundles = bundles.length > 0 ? bundles : data;
-    } else if (data && typeof data === 'object') {
-      const norm = (arr) => Array.isArray(arr) ? arr.map(normalizeProduct) : [];
-      products.trending = norm(data.trending).length > 0 ? norm(data.trending) : (Object.values(data).flat().map(normalizeProduct) || []);
-      products.bestsellers = norm(data.bestsellers).length > 0 ? norm(data.bestsellers) : products.trending;
-      products.newlaunches = norm(data.newlaunches).length > 0 ? norm(data.newlaunches) : products.trending;
-      products.bundles = norm(data.bundles).length > 0 ? norm(data.bundles) : products.trending;
-    } else {
-      products.trending = [];
-      products.bestsellers = [];
-      products.newlaunches = [];
-      products.bundles = [];
-    }
-
+    const res = await fetch(`${apiBase}/api/products`, { cache: 'no-store', signal: controller.signal });
+    if (!res.ok) throw new Error('Catalog request failed');
+    const raw = await res.json();
+    if (!Array.isArray(raw)) throw new Error('Invalid catalog response');
+    const signature = JSON.stringify(raw);
+    if (signature === catalogSignature) return;
+    catalogSignature = signature;
+    catalogProducts = raw.map(normalizeProduct);
+    window.catalogProducts = catalogProducts;
+    products.trending = catalogProducts.filter(p => p.groupName === 'trending');
+    products.bestsellers = catalogProducts.filter(p => p.groupName === 'bestsellers');
+    products.newlaunches = catalogProducts.filter(p => p.groupName === 'newlaunches' || p.badge === 'new');
+    products.bundles = catalogProducts.filter(p => p.groupName === 'bundles' || p.type === 'Bundles');
     window.products = products;
-
-    // Render updated products to visible grids
     renderAllGrids();
-
-    // Dispatch event so other pages (shop-by-age, collections, etc) can re-render
     document.dispatchEvent(new CustomEvent('productsUpdated', { detail: { success: true, products } }));
-
   } catch (err) {
-    console.error('Failed to load products from Database API:', err);
-
-    // Reset products to empty — NEVER USE FALLBACK OR HARDCODED DATA
-    products.trending = [];
-    products.bestsellers = [];
-    products.newlaunches = [];
-    products.bundles = [];
-    window.products = products;
-
-    renderAllGridsError("Unable to load products. Please try again.");
-
-    document.dispatchEvent(new CustomEvent('productsUpdated', { detail: { success: false, error: err.message } }));
-  }
+    catalogSignature = null;
+    catalogProducts = [];
+    window.catalogProducts = catalogProducts;
+    Object.keys(products).forEach(key => { products[key] = []; });
+    renderAllGridsError('Unable to load products. Please try again.');
+    document.dispatchEvent(new CustomEvent('productsUpdated', { detail: { success: false } }));
+  } finally { clearTimeout(timer); }
 }
-
-// Call fetch on DOMContentLoaded
+function refreshVisibleCatalog() {
+  if (!document.hidden && Date.now() - catalogLastAttempt >= 5000) void fetchProductsFromDB();
+}
 window.addEventListener('DOMContentLoaded', () => {
-  setTimeout(fetchProductsFromDB, 50);
+  void fetchProductsFromDB();
+  setInterval(refreshVisibleCatalog, 60000);
+});
+window.addEventListener('focus', refreshVisibleCatalog);
+window.addEventListener('pageshow', refreshVisibleCatalog);
+document.addEventListener('visibilitychange', refreshVisibleCatalog);
+document.addEventListener('click', event => {
+  if (event.target.closest('[data-retry-catalog]')) void fetchProductsFromDB();
 });

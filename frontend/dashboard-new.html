@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    
+
     <style>
         :root {
             --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -607,6 +607,7 @@
     </style>
     <link rel="stylesheet" href="css/mobile-responsive.css">
     <link rel="stylesheet" href="css/policy-mobile.css">
+    <link rel="stylesheet" href="css/dashboard-sections.css">
 </head>
 <body>
     <nav class="navbar">
@@ -631,37 +632,50 @@
 
         <div class="dashboard-grid">
             <!-- Left Side: Profile Card -->
-            <aside class="card dashboard-sidebar">
+            <aside class="card dashboard-sidebar" aria-labelledby="profileHeading">
+                <h2 id="profileHeading" class="section-title">My Profile</h2>
+                <div id="profileFeedback" class="feedback" role="status" hidden></div>
+                <button id="retryProfileBtn" class="btn btn-secondary" hidden>Retry profile</button>
                 <div class="profile-header">
                     <div class="profile-avatar" id="profileAvatar">V</div>
                     <h3 class="profile-name" id="profileName">Loading...</h3>
                     <p id="profileEmail" style="color: var(--text-light); font-size: 0.9rem;">Loading...</p>
                 </div>
-                
+
                 <div class="profile-details">
                     <div class="detail-group">
                         <div class="detail-label">Phone Number</div>
                         <div class="detail-value" id="profilePhone">Not set</div>
                     </div>
                     <div class="detail-group">
-                        <div class="detail-label">Location</div>
+                        <div class="detail-label">Saved Address</div>
                         <div class="detail-value" id="profileLocation">Not set</div>
+                    </div>
+                    <div class="detail-group">
+                        <div class="detail-label">Gender</div>
+                        <div class="detail-value" id="profileGender">Not set</div>
                     </div>
                 </div>
 
                 <div style="margin-top: 20px;">
-                    <button id="editProfileBtn" class="btn btn-primary" style="width: 100%;"><i class="fas fa-edit"></i> Edit</button>
+                    <button id="editProfileBtn" class="btn btn-primary" style="width: 100%;" disabled><i class="fas fa-edit"></i> Edit Profile</button>
                 </div>
             </aside>
 
             <!-- Right Side: Orders -->
             <main class="dashboard-main">
+                <section class="card orders-panel" aria-labelledby="ordersHeading">
+                <div class="section-header">
+                    <h2 id="ordersHeading" class="section-title">My Orders</h2>
+                    <button id="refreshOrdersBtn" class="btn btn-secondary" type="button"><i class="fas fa-sync-alt"></i> Refresh</button>
+                </div>
+                <div id="ordersFeedback" class="feedback" role="status" hidden></div>
                 <!-- Order Tabs -->
                 <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #f1f2f6;">
-                    <button class="order-tab active" data-tab="current" onclick="switchOrderTab('current')" style="background:none;border:none;padding:12px 16px;font-weight:700;color:#667eea;border-bottom:3px solid #667eea;cursor:pointer;">
+                    <button class="order-tab active" data-tab="current" aria-pressed="true" aria-controls="currentOrdersSection" onclick="switchOrderTab('current')" style="background:none;border:none;padding:12px 16px;font-weight:700;color:#667eea;border-bottom:3px solid #667eea;cursor:pointer;">
                         <i class="fas fa-box"></i> Current Orders
                     </button>
-                    <button class="order-tab" data-tab="history" onclick="switchOrderTab('history')" style="background:none;border:none;padding:12px 16px;font-weight:700;color:#b2bec3;cursor:pointer;">
+                    <button class="order-tab" data-tab="history" aria-pressed="false" aria-controls="historyOrdersSection" onclick="switchOrderTab('history')" style="background:none;border:none;padding:12px 16px;font-weight:700;color:#b2bec3;cursor:pointer;">
                         <i class="fas fa-history"></i> Order History
                     </button>
                 </div>
@@ -681,23 +695,38 @@
                         <p style="color: var(--text-light);">Loading your order history...</p>
                     </div>
                 </section>
+                </section>
+                <section id="liveTrackingSection" class="card" aria-labelledby="trackingHeading">
+                    <div class="section-header">
+                        <h2 id="trackingHeading" class="section-title">Live Tracking</h2>
+                        <button id="refreshTrackingBtn" class="btn btn-secondary" type="button"><i class="fas fa-sync-alt"></i> Refresh</button>
+                    </div>
+                    <p class="section-description">Delivery updates refresh every 30 seconds while this page is open.</p>
+                    <p id="trackingFeedback" class="feedback" role="status">Loading tracking information...</p>
+                    <div id="trackingSelectorGroup" class="form-group" hidden>
+                        <label for="trackingOrderSelect">Select an order</label>
+                        <select id="trackingOrderSelect"></select>
+                    </div>
+                    <div id="trackingDetails"></div>
+                </section>
             </main>
         </div>
     </div>
 
     <!-- Edit Profile Modal -->
-    <div id="profileEditModal" class="modal" onclick="handleModalBackdrop(event)">
+    <div id="profileEditModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="editProfileHeading" onclick="handleModalBackdrop(event)">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 style="font-family: 'Fredoka'; margin: 0; color: #764ba2;"><i class="fas fa-user-edit"></i> Edit Profile</h2>
+                <h2 id="editProfileHeading" style="font-family: 'Fredoka'; margin: 0; color: #764ba2;"><i class="fas fa-user-edit"></i> Edit Profile</h2>
                 <button class="modal-close-btn" type="button" onclick="closeModal()" aria-label="Close">&times;</button>
             </div>
 
-            <form id="profileEditForm" novalidate>
+            <form id="profileEditForm">
+                <p id="profileSaveFeedback" class="feedback" role="alert" hidden></p>
                 <!-- Full Name -->
                 <div class="form-group">
                     <label for="editName">Full Name *</label>
-                    <input type="text" id="editName" name="name" placeholder="e.g. Vasanth Kumar" required>
+                    <input type="text" id="editName" name="name" placeholder="e.g. Vasanth Kumar" maxlength="100" autocomplete="name" required>
                 </div>
 
                 <!-- Email (Read-only) -->
@@ -728,7 +757,7 @@
                 <!-- Phone -->
                 <div class="form-group">
                     <label for="editPhone">Phone Number</label>
-                    <input type="tel" id="editPhone" name="phone" placeholder="10-digit mobile number">
+                    <input type="tel" id="editPhone" name="phone" placeholder="Mobile number, including country code if needed" maxlength="24" autocomplete="tel">
                 </div>
 
                 <!-- Address -->
@@ -752,7 +781,11 @@
                 <!-- Pincode -->
                 <div class="form-group">
                     <label for="editPincode">PIN Code</label>
-                    <input type="text" id="editPincode" name="pincode" placeholder="6-digit PIN" maxlength="6">
+                    <input type="text" id="editPincode" name="pincode" placeholder="Postal / PIN code" maxlength="12" autocomplete="postal-code">
+                </div>
+                <div class="form-group">
+                    <label for="editCountry">Country</label>
+                    <input type="text" id="editCountry" name="country" maxlength="80" autocomplete="country-name">
                 </div>
 
                 <!-- Actions -->
@@ -765,7 +798,7 @@
     </div>
 
     <!-- Toast Notification -->
-    <div id="dashToast" class="toast"></div>
+    <div id="dashToast" class="toast" role="status"></div>
 
     <script src="js/config.js"></script>
     <script src="js/dashboard-new.js"></script>

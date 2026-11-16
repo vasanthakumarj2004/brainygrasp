@@ -5,44 +5,49 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!colGrid) return;
 
   const urlParams = new URLSearchParams(window.location.search);
-  let collectionType = urlParams.get('collection') || 'bestsellers';
+  let collectionType = urlParams.get('collection') || 'all';
 
   // Title elements
   const titleEl = document.getElementById('colDynamicTitle');
   const subtitleEl = document.getElementById('colDynamicSubtitle');
 
-  let baseProducts = [];
+  function readCollection() {
+    let baseProducts = [];
   
-    if (collectionType === 'newlaunches') {
-    baseProducts = [...products.newlaunches];
-    if(titleEl) titleEl.textContent = "New Launches";
-    if(subtitleEl) subtitleEl.textContent = "Discover our latest and greatest educational toys and games.";
-  } else if (collectionType === 'bundles') {
-    baseProducts = [...products.bundles];
-    if(titleEl) titleEl.textContent = "Bundles 20% Off";
-    if(subtitleEl) subtitleEl.textContent = "Perfect sets for every occasion, bundled for extra savings!";
-  } else if (collectionType === 'return') {
-    baseProducts = [...products.trending.filter(p => p.price < 700), ...products.bestsellers.filter(p => p.price < 700)];
-    if(titleEl) titleEl.textContent = "Return Gifts 25% Off";
-    if(subtitleEl) subtitleEl.textContent = "Bulk return gifts for your kid's amazing birthday party.";
-  } else if (collectionType === 'birthday') {
-    baseProducts = [...products.bestsellers, ...products.newlaunches];
-    if(titleEl) titleEl.textContent = "Birthday Gifts";
-    if(subtitleEl) subtitleEl.textContent = "The perfect gifts to make their special day magical.";
-  } else if (collectionType === 'gifting') {
-    baseProducts = [...products.bundles, ...products.trending.filter(p => p.price < 700)];
-    if(titleEl) titleEl.textContent = "Gifting";
-    if(subtitleEl) subtitleEl.textContent = "Explore our wide range of gifting options for every occasion.";
-  } else {
-    // Default to bestsellers
-    baseProducts = [...products.bestsellers];
-    if(titleEl) titleEl.textContent = "Bestsellers";
-    if(subtitleEl) subtitleEl.textContent = "Shop our most loved and highly rated products.";
-  }
+    if (collectionType === 'all' || collectionType === 'bestsellers') {
+      baseProducts = [...(window.catalogProducts || [])];
+      if (titleEl) titleEl.textContent = 'All Products';
+      if (subtitleEl) subtitleEl.textContent = 'Explore Sentence Safari and Mag Clash: hands-on educational play.';
+    } else if (collectionType === 'newlaunches') {
+      baseProducts = [...products.newlaunches];
+      if(titleEl) titleEl.textContent = "New Launches";
+      if(subtitleEl) subtitleEl.textContent = "Discover our latest and greatest educational toys and games.";
+    } else if (collectionType === 'bundles') {
+      baseProducts = [...products.bundles];
+      if(titleEl) titleEl.textContent = "Bundles";
+      if(subtitleEl) subtitleEl.textContent = "Perfect sets for every occasion, bundled for extra savings!";
+    } else if (collectionType === 'return') {
+      baseProducts = [...products.trending.filter(p => p.price < 700), ...products.bestsellers.filter(p => p.price < 700)];
+      if(titleEl) titleEl.textContent = "Return Gifts";
+      if(subtitleEl) subtitleEl.textContent = "Bulk return gifts for your kid's amazing birthday party.";
+    } else if (collectionType === 'birthday') {
+      baseProducts = [...products.bestsellers, ...products.newlaunches];
+      if(titleEl) titleEl.textContent = "Birthday Gifts";
+      if(subtitleEl) subtitleEl.textContent = "The perfect gifts to make their special day magical.";
+    } else if (collectionType === 'gifting') {
+      baseProducts = [...products.bundles, ...products.trending.filter(p => p.price < 700)];
+      if(titleEl) titleEl.textContent = "Gifting";
+      if(subtitleEl) subtitleEl.textContent = "Explore our wide range of gifting options for every occasion.";
+    } else {
+      // Default to bestsellers
+      baseProducts = [...products.bestsellers];
+      if(titleEl) titleEl.textContent = "Bestsellers";
+      if(subtitleEl) subtitleEl.textContent = "Shop our most loved and highly rated products.";
+    }
 
-  const uniqueProducts = Array.from(new Map(baseProducts.map(item => [item.id, item])).values());
-  
-  let currentProducts = [...uniqueProducts];
+    return Array.from(new Map(baseProducts.map(item => [item.id, item])).values());
+  }
+  let uniqueProducts = readCollection();
   let currentFilters = {
     ageGroup: null,
     categories: [],
@@ -63,10 +68,11 @@ document.addEventListener('DOMContentLoaded', () => {
   function createCheckboxes(containerId, items, filterType) {
     const container = document.getElementById(containerId);
     if (!container) return;
+    const selected = new Set(Array.from(container.querySelectorAll('input:checked')).map(input => input.value));
     container.innerHTML = items.map(item => `
       <label class="filter-checkbox">
-        <input type="checkbox" value="${item}" data-filter-type="${filterType}">
-        <span class="checkmark"></span> ${item}
+        <input type="checkbox" value="${catalogEscape(item)}" data-filter-type="${filterType}" ${selected.has(item) ? 'checked' : ''}>
+        <span class="checkmark"></span> ${catalogEscape(item)}
       </label>
     `).join('');
   }
@@ -92,11 +98,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function applyFiltersAndSort() {
-    let filtered = uniqueProducts;
+    let filtered = [...uniqueProducts];
 
     // 1. Age Pills Filter
     if (currentFilters.ageGroup) {
-      filtered = filtered.filter(p => p.ageGroup === currentFilters.ageGroup);
+      filtered = filtered.filter(p => productMatchesAge(p, currentFilters.ageGroup));
     }
 
     // 2. Sidebar Array Filters
@@ -155,12 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Sidebar Checkboxes
-  const checkboxes = document.querySelectorAll('#colFilterSidebar .filter-checkbox input');
-  checkboxes.forEach(cb => {
-    cb.addEventListener('change', () => {
-      applyFiltersAndSort();
-    });
-  });
+  document.getElementById('colFilterSidebar')?.addEventListener('change', applyFiltersAndSort);
 
   // Sort Dropdown
   const sortSelect = document.getElementById('colSortBySelect');
@@ -204,5 +205,17 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Initial Render — go through the full sort/filter pipeline
+  document.addEventListener('productsUpdated', event => {
+    uniqueProducts = readCollection();
+    if (!event.detail?.success) {
+      if (countEl) countEl.textContent = 'Products unavailable';
+      return;
+    }
+    createCheckboxes('colFilterCategories', [...new Set(uniqueProducts.map(p => p.category).filter(Boolean))], 'categories');
+    createCheckboxes('colFilterSkills', [...new Set(uniqueProducts.flatMap(p => p.skills || []))], 'skills');
+    createCheckboxes('colFilterThemes', [...new Set(uniqueProducts.map(p => p.theme).filter(Boolean))], 'themes');
+    applyFiltersAndSort();
+  });
+
   applyFiltersAndSort();
 });

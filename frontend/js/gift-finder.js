@@ -12,6 +12,11 @@ function initGiftFinder() {
   let currentStep = 1;
   const totalSteps = steps.length;
   const answers = {};
+  let resultsShown = false;
+
+  document.addEventListener('productsUpdated', event => {
+    if (resultsShown && event.detail?.success) showGiftResults();
+  });
   
   document.querySelectorAll('.gift-option').forEach(btn => {
     btn.addEventListener('click', function() {
@@ -36,6 +41,7 @@ function initGiftFinder() {
   restartBtn?.addEventListener('click', (e) => {
     e.preventDefault();
     resultDiv.style.display = 'none';
+    resultsShown = false;
     currentStep = 1;
     steps.forEach(s => s.classList.remove('active'));
     document.querySelectorAll('.gift-option').forEach(b => b.classList.remove('selected'));
@@ -51,18 +57,19 @@ function initGiftFinder() {
   }
 
   function showGiftResults() {
-    const allProducts = [...products.trending, ...products.bestsellers, ...products.newlaunches, ...products.bundles];
+    resultsShown = true;
+    const allProducts = window.catalogProducts || [];
     const ageChoice = answers.step2;
     const interest = answers.step3;
     const budget = answers.step4;
 
     let recommendations = allProducts.filter(product => {
-      const ageMatch = !ageChoice || ageChoice === 'all' || product.ageGroup === ageChoice;
+      const ageMatch = !ageChoice || ageChoice === 'all' || productMatchesAge(product, ageChoice);
       const interestMatch = !interest || interest === 'all' ||
         (interest === 'science' && (product.category || '').toLowerCase().includes('learning')) ||
         (interest === 'art' && (product.category || '').toLowerCase().includes('arts')) ||
         (interest === 'puzzles' && (product.category || '').toLowerCase().includes('puzzle')) ||
-        (interest === 'reading' && (product.name || '').toLowerCase().match(/word|book|flash|write/));
+        (interest === 'reading' && (product.name || '').toLowerCase().match(/sentence|word|book|flash|write/));
 
       const price = Number(product.price) || 0;
       const budgetMatch =
@@ -75,7 +82,7 @@ function initGiftFinder() {
     });
 
     if (recommendations.length < 3) {
-      const fallback = allProducts.filter(p => !recommendations.some(r => r.id === p.id));
+      const fallback = allProducts.filter(p => productMatchesAge(p, ageChoice) && !recommendations.some(r => r.id === p.id));
       recommendations = [...recommendations, ...fallback];
     }
     recommendations = recommendations.slice(0, 4);

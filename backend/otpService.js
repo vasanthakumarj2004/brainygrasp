@@ -1,4 +1,7 @@
-require('dotenv').config();
+'use strict';
+require('dotenv').config({ path: require('path').join(__dirname, '.env'), quiet: true });
+const nodemailer = require('nodemailer');
+const { smtpOptions, smtpErrorMessage } = require('./smtpConfig');
 
 // ── Shared HTML email template ────────────────────────────────────────────
 function buildEmailHTML(otp) {
@@ -27,134 +30,46 @@ function buildEmailHTML(otp) {
   `;
 }
 
-// ── Resend HTTP API sender ────────────────────────────────────────────────
-async function sendViaResend(email, otp) {
-  if (!process.env.RESEND_API_KEY) return false;
-  try {
-    const FROM = process.env.EMAIL_FROM || 'BrainyGrasp <onboarding@resend.dev>';
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: FROM,
-        to: [email],
-        subject: 'BrainyGrasp — Your One-Time Password (OTP)',
-        html: buildEmailHTML(otp)
-      })
-    });
-
-    if (!res.ok) {
-      const err = await res.text();
-      console.warn(`⚠️ Resend API failed (${res.status}): ${err}`);
-      return false;
-    }
-
-    const data = await res.json();
-    console.log(`✅ OTP email sent via Resend to ${email}: ${data.id}`);
-    return true;
-  } catch (err) {
-    console.warn(`⚠️ Resend error: ${err.message}`);
-    return false;
-  }
-}
-
-// ── Nodemailer SMTP sender (Gmail fallback) ───────────────────────────────
-async function sendViaNodemailer(email, otp) {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return false;
-
-  const nodemailer = require('nodemailer');
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    },
-    tls: { rejectUnauthorized: true },
-    connectionTimeout: 10000,
-    socketTimeout: 10000
-  });
-
-  try {
-    const result = await transporter.sendMail({
-      from: `"BrainyGrasp" <${process.env.EMAIL_USER}>`,
-      replyTo: process.env.EMAIL_USER,
-      to: email,
-      subject: 'BrainyGrasp — Your One-Time Password (OTP)',
-      html: buildEmailHTML(otp)
-    });
-    console.log(`✅ OTP email sent via Gmail SMTP to ${email}: ${result.messageId}`);
-    transporter.close();
-    return true;
-  } catch (error) {
-    console.warn(`⚠️ Gmail SMTP failed to ${email}: ${error.message}`);
-    transporter.close();
-    return false;
-  }
-}
-
-// ── Send OTP via Email (Multi-tier Fallback) ──────────────────────────────
+// Gmail SMTP is the only OTP delivery provider in every environment.
 async function sendOTPEmail(email, otp) {
-  const isDev = process.env.NODE_ENV !== 'production';
-  if (isDev) {
-    console.log(`\n==================================================`);
-    console.log(`🔑 [DEV OTP LOG] Generated OTP for ${email}: ${otp}`);
-    console.log(`==================================================\n`);
-  }
-
-  // Tier 1: Try Resend if configured
-  if (process.env.RESEND_API_KEY) {
-    console.log('📨 Trying Resend API for OTP delivery...');
-    const resendSuccess = await sendViaResend(email, otp);
-    if (resendSuccess) return true;
-    console.log('🔄 Resend failed or unconfigured. Falling back to Gmail SMTP...');
-  }
-
-  // Tier 2: Try Gmail SMTP
-  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-    console.log('📨 Sending OTP via Gmail SMTP...');
-    const nodemailerSuccess = await sendViaNodemailer(email, otp);
-    if (nodemailerSuccess) return true;
-    console.log('🔄 Gmail SMTP failed. Checking dev mode fallback...');
-  }
-
-  // Tier 3: Local Dev / Non-Production Fallback
-  if (isDev) {
-    return true;
-  }
-
-  console.error(`❌ All OTP delivery methods failed for ${email}`);
-  return false;
-}
-
-// ── Send OTP via SMS (Stub) ───────────────────────────────────────────────
-async function sendOTPSMS(phone, otp) {
+  let transporter;
   try {
-    console.log(`📱 [SMS stub] OTP delivery attempted for phone ending in ...${String(phone).slice(-3)}`);
+    const options = smtpOptions();
+    transporter = nodemailer.createTransport(options);
+    const result = await transporter.sendMail({
+      from: { name: 'BrainyGrasp', address: options.auth.user },
+      replyTo: options.auth.user,
+      to: email,
+      subject: 'BrainyGrasp - Your One-Time Password (OTP)',
+      text: `Your BrainyGrasp OTP is ${otp}. It expires in 10 minutes. Do not share this code.`,
+      html: buildEmailHTML(otp),
+    });
+    const accepted = (result.accepted || []).some(recipient =>
+      String(typeof recipient === 'string' ? recipient : recipient.address).toLowerCase() === String(email).trim().toLowerCase());
+    if (!accepted) {
+      const error = new Error('Recipient not accepted');
+      error.code = 'ERECIPIENT';
+      throw error;
+    }
     return true;
   } catch (error) {
-    console.error(`❌ Failed to send OTP SMS:`, error.message);
+    // Do not log provider responses: they can include credentials or recipient data.
+    console.error(smtpErrorMessage(error));
     return false;
+  } finally {
+    transporter?.close();
   }
 }
 
-// ── Main OTP dispatcher ───────────────────────────────────────────────────
-async function sendOTP(method, value, otp) {
-  if (method === 'email') {
-    return sendOTPEmail(value, otp);
-  } else if (method === 'phone') {
-    return sendOTPSMS(value, otp);
-  }
-  console.error(`❌ Unsupported OTP method: ${method}`);
+async function sendOTPSMS() {
+  console.error('SMS OTP is not configured. Use email verification.');
   return false;
 }
 
-module.exports = {
-  sendOTP,
-  sendOTPEmail,
-  sendOTPSMS
-};
+async function sendOTP(method, value, otp) {
+  if (method === 'email') return sendOTPEmail(value, otp);
+  if (method === 'phone') return sendOTPSMS();
+  return false;
+}
+
+module.exports = { sendOTP, sendOTPEmail, sendOTPSMS };

@@ -28,6 +28,12 @@ const crypto   = require('crypto');
 const pool     = require('../db');
 const { deleteCache, clearCachePattern, CACHE_KEYS } = require('../redisClient');
 const shiprocket = require('../shiprocketService');
+const { approveShipment } = require('../shippingJobs');
+const { tracking } = require('../orderFulfillment');
+const { ShippingError } = require('../shippingPolicy');
+const { productShipping } = require('../parcelPacking');
+const { validateProductImage } = require('../productValidation');
+const { positiveId } = require('../checkoutService');
 
 const SECRET_KEY = process.env.JWT_SECRET;
 
@@ -98,17 +104,14 @@ function parseSkills(skills) {
   return '[]';
 }
 
-function rejectGooglePhotos(image, res) {
-  if (
-    typeof image === 'string' &&
-    (image.includes('photos.google.com') || image.includes('photos.app.goo.gl'))
-  ) {
-    res.status(400).json({
-      error: 'Google Photos web sharing links are not direct image files. Please enter a direct image URL.',
-    });
-    return true;
-  }
-  return false;
+function rejectInvalidProductImage(image, res) {
+  try { validateProductImage(image); return false; }
+  catch (err) { res.status(400).json({ error: err.message }); return true; }
+}
+
+async function clearProductCaches() {
+  // Retire legacy entries as well; public catalog reads now bypass Redis.
+  await Promise.all(['products*', 'search:products:*', 'search:categories:*'].map(pattern => clearCachePattern(pattern).catch(() => {})));
 }
 
 // ── POST /api/admin/products ──────────────────────────────────────────────────
@@ -127,14 +130,16 @@ router.post('/api/admin/products', authenticateAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Price must be a valid positive number' });
   }
 
-  if (rejectGooglePhotos(image, res)) return;
+  if (rejectInvalidProductImage(image, res)) return;
 
   try {
+    const parcel = productShipping(req.body, { optional: true });
     const result = await pool.query(`
       INSERT INTO products
         (name, group_name, price, original_price, save, age, age_group,
-         badge, image, category, skills, theme, type, launch_date, sales, reviews, offer)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+         badge, image, category, skills, theme, type, launch_date, sales, reviews, offer,
+         shipping_weight_g, shipping_length_cm, shipping_breadth_cm, shipping_height_cm)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
       RETURNING *
     `, [
       name, group_name, parsedPrice,
@@ -145,11 +150,13 @@ router.post('/api/admin/products', authenticateAdmin, async (req, res) => {
       launch_date || new Date().toISOString().split('T')[0],
       parseInt(sales || 0) || 0, parseInt(reviews || 0) || 0,
       offer || 'Buy any 2 | Get FLAT 10% OFF',
+      parcel.shipping_weight_g, parcel.shipping_length_cm, parcel.shipping_breadth_cm, parcel.shipping_height_cm,
     ]);
 
-    await clearCachePattern('products*').catch(() => {});
+    await clearProductCaches();
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    if (err instanceof ShippingError) return res.status(err.status).json({ error: err.message });
     console.error('Admin add product error:', err);
     res.status(500).json({ error: err.message || 'Failed to add product' });
   }
@@ -168,15 +175,17 @@ router.put('/api/admin/products/:id', authenticateAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Price must be a valid positive number' });
   }
 
-  if (rejectGooglePhotos(image, res)) return;
+  if (rejectInvalidProductImage(image, res)) return;
 
   try {
+    const parcel = productShipping(req.body, { optional: true });
     const result = await pool.query(`
       UPDATE products SET
         name=$1, group_name=$2, price=$3, original_price=$4, save=$5,
         age=$6, age_group=$7, badge=$8, image=$9, category=$10,
         skills=$11, theme=$12, type=$13, launch_date=$14,
-        sales=$15, reviews=$16, offer=$17
+        sales=$15, reviews=$16, offer=$17,
+        shipping_weight_g=$19, shipping_length_cm=$20, shipping_breadth_cm=$21, shipping_height_cm=$22
       WHERE id=$18
       RETURNING *
     `, [
@@ -189,12 +198,14 @@ router.put('/api/admin/products/:id', authenticateAdmin, async (req, res) => {
       parseInt(sales || 0) || 0, parseInt(reviews || 0) || 0,
       offer || 'Buy any 2 | Get FLAT 10% OFF',
       parseInt(id),
+      parcel.shipping_weight_g, parcel.shipping_length_cm, parcel.shipping_breadth_cm, parcel.shipping_height_cm,
     ]);
 
     if (result.rows.length === 0) return res.status(404).json({ error: 'Product not found' });
-    await clearCachePattern('products*').catch(() => {});
+    await clearProductCaches();
     res.json(result.rows[0]);
   } catch (err) {
+    if (err instanceof ShippingError) return res.status(err.status).json({ error: err.message });
     console.error('Admin update product error:', err);
     res.status(500).json({ error: err.message || 'Failed to update product' });
   }
@@ -208,7 +219,7 @@ router.delete('/api/admin/products/:id', authenticateAdmin, async (req, res) => 
       'DELETE FROM products WHERE id=$1 RETURNING id', [parseInt(id)]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Product not found' });
-    await clearCachePattern('products*').catch(() => {});
+    await clearProductCaches();
     res.json({ success: true, deleted_id: result.rows[0].id });
   } catch (err) {
     console.error('Admin delete product error:', err);
@@ -228,7 +239,7 @@ router.get('/api/admin/dashboard', authenticateAdmin, async (req, res) => {
     ] = await Promise.all([
       pool.query('SELECT COUNT(*) FROM products'),
       pool.query('SELECT COUNT(*) FROM orders'),
-      pool.query("SELECT COALESCE(SUM(total),0) AS total FROM orders WHERE LOWER(status) != 'cancelled'"),
+      pool.query("SELECT COALESCE(SUM(total),0) AS total FROM orders WHERE LOWER(status) NOT IN ('cancelled', 'payment pending')"),
       pool.query("SELECT COUNT(*) FROM orders WHERE LOWER(status) = 'confirmed'"),
       pool.query("SELECT COUNT(*) FROM orders WHERE LOWER(status) IN ('placed','shipped')"),
       pool.query("SELECT COUNT(*) FROM orders WHERE LOWER(status) = 'delivered'"),
@@ -237,6 +248,7 @@ router.get('/api/admin/dashboard', authenticateAdmin, async (req, res) => {
         SELECT o.id, o.total, o.status, o.created_at,
                u.name AS customer_name, u.email AS customer_email
         FROM orders o
+         LEFT JOIN shipping_jobs j ON j.order_id = o.id
         LEFT JOIN users u ON o.user_id = u.id
         ORDER BY o.created_at DESC LIMIT 10
       `),
@@ -309,13 +321,15 @@ router.get('/api/admin/orders', authenticateAdmin, async (req, res) => {
         params
       ),
       pool.query(
-        `SELECT o.*,
+        `SELECT o.*, j.state AS shipping_job_state, j.phase AS shipping_job_phase,
+             j.details AS shipping_job_details, j.last_error AS shipping_job_error,
                 u.name  AS customer_name,
                 u.email AS customer_email,
                 a.full_name AS addr_name,
                 a.phone     AS addr_phone,
                 a.line1, a.city, a.state, a.pincode
          FROM orders o
+         LEFT JOIN shipping_jobs j ON j.order_id = o.id
          LEFT JOIN users     u ON o.user_id     = u.id
          LEFT JOIN addresses a ON o.address_id  = a.id
          ${whereClause}
@@ -336,13 +350,15 @@ router.get('/api/admin/orders', authenticateAdmin, async (req, res) => {
 router.get('/api/admin/orders/:id', authenticateAdmin, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT o.*,
+      SELECT o.*, j.state AS shipping_job_state, j.phase AS shipping_job_phase,
+             j.details AS shipping_job_details, j.last_error AS shipping_job_error,
              u.name  AS customer_name,
              u.email AS customer_email,
              a.full_name AS addr_name,
              a.phone     AS addr_phone,
              a.line1, a.city, a.state, a.pincode
       FROM orders o
+         LEFT JOIN shipping_jobs j ON j.order_id = o.id
       LEFT JOIN users     u ON o.user_id    = u.id
       LEFT JOIN addresses a ON o.address_id = a.id
       WHERE o.id = $1
@@ -366,10 +382,13 @@ router.put('/api/admin/orders/:id/status', authenticateAdmin, async (req, res) =
       UPDATE orders
       SET status=$1, expected_delivery=$2, delivery_date=$3, admin_note=$4
       WHERE id=$5
+        AND (payment_method='cod' OR checkout_key IS NULL OR payment_verified_at IS NOT NULL OR LOWER($1) = 'payment pending')
+        AND (status=$1 OR NOT EXISTS (SELECT 1 FROM shipping_jobs WHERE order_id=orders.id AND state IN ('queued','retry','processing')))
+        AND NOT (LOWER($1)='cancelled' AND shipment_id IS NOT NULL)
       RETURNING id, user_id, status, expected_delivery, delivery_date, admin_note
     `, [status, expected_delivery || null, delivery_date || null, admin_note || null, parseInt(req.params.id)]);
 
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Order not found' });
+    if (result.rows.length === 0) return res.status(409).json({ error: 'Order update blocked: check pending payment/booking. Cancel existing shipments in Shiprocket first; local status changes do not cancel courier pickups.' });
 
     const updated = result.rows[0];
     if (updated.user_id) {
@@ -409,96 +428,27 @@ router.put('/api/admin/orders/:id/status', authenticateAdmin, async (req, res) =
 
 // ── POST /api/admin/orders/:id/push-shiprocket ────────────────────────────────
 router.post('/api/admin/orders/:id/push-shiprocket', authenticateAdmin, async (req, res) => {
-  const orderId = parseInt(req.params.id);
   try {
-    const orderRes = await pool.query(`
-      SELECT o.*, a.full_name, a.line1, a.line2, a.city, a.state, a.pincode, a.phone AS addr_phone,
-             u.name AS user_name, u.email AS user_email, u.phone AS user_phone
-      FROM orders o
-      LEFT JOIN addresses a ON o.address_id = a.id
-      LEFT JOIN users     u ON o.user_id    = u.id
-      WHERE o.id = $1
-    `, [orderId]);
-
-    if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Order not found' });
-
-    const o = orderRes.rows[0];
-    if (o.awb_number) {
-      return res.status(400).json({ error: `Order already has AWB: ${o.awb_number}` });
-    }
-
-    const address  = { full_name: o.full_name, line1: o.line1, line2: o.line2, city: o.city, state: o.state, pincode: o.pincode, phone: o.addr_phone };
-    const user     = { name: o.user_name, email: o.user_email, phone: o.user_phone };
-    const items    = typeof o.items === 'string' ? JSON.parse(o.items) : o.items;
-    const orderRow = { id: o.id, created_at: o.created_at, subtotal: o.subtotal, total: o.total, payment_method: o.payment_method };
-
-    const { shipmentId, awb, courierName } = await shiprocket.bookShipment(orderRow, address, user, items);
-
-    await pool.query(
-      'UPDATE orders SET shipment_id=$1, awb_number=$2, courier_name=$3, tracking_status=$4 WHERE id=$5',
-      [shipmentId, awb, courierName, 'Confirmed', orderId]
-    );
-    await deleteCache(CACHE_KEYS.USER_ORDERS(o.user_id)).catch(() => {});
-
-    res.json({ success: true, shipmentId, awb, courierName });
+    const job = await approveShipment(positiveId(req.params.id), req.body?.parcel);
+    res.status(job.state === 'completed' ? 200 : 202).json({ success: true, state: job.state,
+      message: job.state === 'completed' ? 'Pickup is already confirmed.' : 'Shipment queued. Refresh the order to see booking progress.' });
   } catch (err) {
-    console.error('Admin push-shiprocket error:', err);
-    res.status(500).json({ error: err.message || 'Shiprocket push failed' });
+    res.status(err.status || 503).json({ error: err instanceof ShippingError ? err.message : 'Unable to queue shipment. Check the saved order and try again.' });
   }
 });
 
-// ── POST /api/admin/orders/:id/refresh-tracking ───────────────────────────────
 router.post('/api/admin/orders/:id/refresh-tracking', authenticateAdmin, async (req, res) => {
-  const orderId = parseInt(req.params.id);
   try {
-    const orderRes = await pool.query(
-      'SELECT id, user_id, awb_number FROM orders WHERE id = $1', [orderId]
-    );
-    if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Order not found' });
-
-    const order = orderRes.rows[0];
-    if (!order.awb_number) {
-      return res.status(400).json({ error: 'No AWB assigned to this order yet.' });
-    }
-
-    const tracking = await shiprocket.getTracking(order.awb_number);
-
-    const updateParams = [
-      tracking.srStatus || null,
-      tracking.estimatedDelivery || null,
-      tracking.courierName || null,
-    ];
-    let updateSql = `
-      UPDATE orders
-      SET tracking_status    = COALESCE($1, tracking_status),
-          estimated_delivery = COALESCE($2, estimated_delivery),
-          courier_name       = COALESCE(NULLIF($3, ''), courier_name)
-    `;
-
-    if (tracking.currentStatus) {
-      updateSql += `, status = $4 WHERE id = $5`;
-      updateParams.push(tracking.currentStatus, orderId);
-    } else {
-      updateSql += ` WHERE id = $4`;
-      updateParams.push(orderId);
-    }
-
-    await pool.query(updateSql, updateParams);
-
-    if (order.user_id) {
-      await deleteCache(CACHE_KEYS.USER_ORDERS(order.user_id)).catch(() => {});
-    }
-
-    res.json({
-      success: true,
-      tracking_status:    tracking.srStatus,
-      status:             tracking.currentStatus,
-      estimated_delivery: tracking.estimatedDelivery,
-      courier_name:       tracking.courierName,
-    });
+    const id = positiveId(req.params.id);
+    const result = await pool.query('SELECT awb_number FROM orders WHERE id=$1', [id]);
+    if (!result.rows[0]?.awb_number) return res.status(409).json({ error: 'No AWB has been assigned yet.' });
+    const remote = await shiprocket.getTracking(result.rows[0].awb_number);
+    const order = await tracking.refresh(id, remote);
+    await deleteCache(CACHE_KEYS.USER_ORDERS(order.user_id)).catch(() => {});
+    res.json({ success: true, status: order.status, tracking_status: order.tracking_status,
+      estimated_delivery: order.estimated_delivery, courier_name: order.courier_name });
   } catch (err) {
-    console.error('Admin refresh-tracking error:', err);
-    res.status(500).json({ error: err.message || 'Failed to refresh tracking status' });
+    res.status(err.status || 503).json({ error: err instanceof ShippingError ? err.message : 'Unable to refresh tracking. Please try again.' });
   }
 });
 

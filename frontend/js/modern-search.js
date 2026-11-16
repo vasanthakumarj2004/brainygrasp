@@ -132,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch(
                 `${API_BASE}/api/products/search?q=${encodeURIComponent(query)}`,
-                { signal: searchState.controller.signal }
+                { signal: searchState.controller.signal, cache: 'no-store' }
             );
 
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -146,11 +146,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             resultsArea.innerHTML = products.map(item => `
-                <a href="collections.html" class="search-result-card">
+                <a href="search-results.html?q=${encodeURIComponent(item.name)}" class="search-result-card">
                     <img src="${escapeHTML(item.image || '')}"
                          alt="${escapeHTML(item.name)}"
                          class="search-result-img"
-                         onerror="this.src='images/placeholder.png'">
+                         onerror="this.onerror=null;this.src='/images/product-placeholder.svg'">
                     <div class="search-result-info">
                         <h5>${highlightMatch(item.name, query)}</h5>
                         <p>&#8377;${item.price}

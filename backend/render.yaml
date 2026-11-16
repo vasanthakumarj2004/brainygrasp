@@ -31,9 +31,31 @@ services:
         sync: false
       - key: RAZORPAY_KEY_SECRET
         sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
       - key: ADMIN_USERNAME
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
       - key: ALLOWED_ORIGINS
         sync: false          # e.g. https://brainygrasp.vercel.app
+      # Automatic shipping requires a continuously running service. Free/sleeping
+      # instances delay background jobs; choose an always-on plan before launch.
+      - key: SHIPROCKET_ENABLED
+        value: "false"
+      - key: SHIPROCKET_EMAIL
+        sync: false
+      - key: SHIPROCKET_PASSWORD
+        sync: false
+      - key: SHIPROCKET_CHANNEL_ID
+        sync: false
+      - key: SHIPROCKET_PICKUP_LOCATION
+        sync: false
+      - key: SHIPROCKET_PICKUP_POSTCODE
+        sync: false
+      - key: SHIPROCKET_ORDER_PREFIX
+        sync: false
+      - key: SHIPROCKET_PACKAGES
+        sync: false
+      - key: SHIPROCKET_WEBHOOK_SECRET
+        sync: false
