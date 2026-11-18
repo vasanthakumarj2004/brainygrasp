@@ -1,7 +1,7 @@
 /**
  * Shared API Configuration for Affiliate Portal
  */
-const PRODUCTION_API_URL = window.BG_PRODUCTION_API_URL || 'https://braingrasp-devin-1.onrender.com';
+const PRODUCTION_API_URL = window.BG_PRODUCTION_API_URL || 'https://brainygrasp.com';
 
 window.AFF_CONFIG = {
   API_BASE: (() => {
@@ -11,6 +11,7 @@ window.AFF_CONFIG = {
                     host === 'localhost' || 
                     host === '127.0.0.1' || 
                     host === '0.0.0.0' || 
+                    host === '16.178.149.138'||
                     host.startsWith('192.168.') || 
                     host.startsWith('10.') || 
                     host.startsWith('172.') || 
