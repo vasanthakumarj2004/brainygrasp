@@ -12,6 +12,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:?Set ALLOWED_ORIGINS in backend/.env}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5500}
       - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-password}@db:5432/${DB_NAME:-brainygras}
       - REDIS_URL=redis://default:${REDIS_PASSWORD:-redis_password}@redis:6379

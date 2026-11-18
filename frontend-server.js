@@ -1,7 +1,7 @@
 /**
  * frontend-server.js — BrainyGrasp Dedicated Frontend Server
  * ─────────────────────────────────────────────────────────────
- * Port : 5500 (frontend only)
+ * Port : 5500 by default (override with FRONTEND_PORT)
  * Serves:
  *   /           → frontend/index.html
  *   /admin/*    → admin/
@@ -155,7 +155,7 @@ function send404(res, url) {
   `);
 }
 
-const PORT = 5500;
+const PORT = process.env.FRONTEND_PORT || 5500;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🌐 Frontend server  →  http://localhost:${PORT}`);
   console.log(`🛠️  Admin panel      →  http://localhost:${PORT}/admin`);
