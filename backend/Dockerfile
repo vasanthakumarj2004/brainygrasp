@@ -1,25 +1,28 @@
 # Stage 1: Build & Dependencies
 FROM node:20-alpine AS builder
 
-WORKDIR /app
+WORKDIR /app/backend
 
 # Copy package descriptors
-COPY package*.json ./
+COPY backend/package*.json ./
 
 # Install production dependencies only
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
 # Copy source code
-COPY . .
+COPY backend/ ./
+COPY frontend/ /app/frontend/
+COPY admin/ /app/admin/
 
 # Stage 2: Minimal Production Image
 FROM node:20-alpine AS runner
 
-WORKDIR /app
+WORKDIR /app/backend
 
 # Set production environment
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV SERVE_FRONTEND=true
 
 # Create non-root user for container security
 RUN addgroup -g 1001 -S nodejs && \

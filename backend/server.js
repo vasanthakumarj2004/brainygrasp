@@ -65,34 +65,7 @@ app.set('trust proxy', 1);
 // ── CORS ──────────────────────────────────────────────────────────────────────
 // Allow origins listed in ALLOWED_ORIGINS (comma-separated).
 // When not set (local dev), all origins are allowed.
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-  : null;
-
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-
-  if (!ALLOWED_ORIGINS) {
-    res.header('Access-Control-Allow-Origin', '*');
-  } else if (origin && ALLOWED_ORIGINS.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Vary', 'Origin');
-  } else if (origin) {
-    if (req.method === 'OPTIONS') {
-      res.header('Access-Control-Allow-Origin', 'null');
-      return res.status(403).end();
-    }
-    return res.status(403).json({ error: 'CORS: Origin not allowed.' });
-  }
-
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.header('Access-Control-Max-Age', '86400');
-
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  next();
-});
+app.use(require('./corsPolicy').createCorsPolicy(process.env));
 
 app.post('/api/webhooks/razorpay', express.raw({ type: 'application/json', limit: '256kb' }), paymentRouter.webhook);
 app.use(express.json({ limit: '256kb' }));
@@ -108,9 +81,8 @@ app.use('/', productsRouter);
 app.use('/', paymentRouter);
 
 // ── Root & Health ─────────────────────────────────────────────────────────────
-// Port 3000 is dedicated to the backend API.
-// Hitting backend root in a browser shows this JSON status message.
-app.get('/', (req, res) => {
+// Keep the API status separate from the production storefront.
+function apiStatus(req, res) {
   res.json({
     status   : 'ok',
     server   : 'BrainyGrasp API',
@@ -118,7 +90,8 @@ app.get('/', (req, res) => {
     message  : 'Backend API is running. All endpoints are under /api/*',
     frontend : process.env.FRONTEND_URL || 'http://localhost:5500',
   });
-});
+}
+app.get('/api', apiStatus);
 
 async function handleHealthCheck(req, res) {
   let dbStatus = 'down';
@@ -158,6 +131,12 @@ async function handleHealthCheck(req, res) {
 
 app.get('/health', handleHealthCheck);
 app.get('/api/health', handleHealthCheck);
+
+// Run the complete site on one port, including plain `npm start` deployments.
+// Local split-port development still works. API-only hosts can opt out explicitly.
+const serveFrontend = process.env.SERVE_FRONTEND !== 'false';
+if (serveFrontend) require('./serveFrontend').mountFrontend(app);
+else app.get('/', apiStatus);
 
 
 // ── Database initialization ───────────────────────────────────────────────────

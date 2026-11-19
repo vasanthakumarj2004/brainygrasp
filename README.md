@@ -2,6 +2,10 @@ zz# BrainyGRAS — Local run instructions
 
 Quick steps to run the app locally (Windows / macOS / Linux).
 
+For EC2 frontend serving, Docker packaging and CORS configuration, follow
+[EC2_DEPLOYMENT.md](EC2_DEPLOYMENT.md). The backend now serves the complete site
+on port 3000 by default; the separate frontend server is optional for development.
+
 **Prerequisites**
 - Docker Desktop (for Postgres + pgAdmin + Redis)
 - Node.js (v16+)

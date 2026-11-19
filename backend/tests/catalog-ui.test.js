@@ -52,6 +52,33 @@ function browser(page) {
   return { context, window, document, elements, handlers, windowHandlers, intervals, timers, run, fire };
 }
 
+test('product card and gallery images use the storefront asset directory on nested local and production pages', () => {
+  for (const [page, script, assetBase] of [
+    ['http://localhost:5501/BRAINGRASP_DEVIN/frontend/index.html', 'http://localhost:5501/BRAINGRASP_DEVIN/frontend/js/products.js', 'http://localhost:5501/BRAINGRASP_DEVIN/frontend/'],
+    ['http://localhost:3000/', 'http://localhost:3000/js/products.js', 'http://localhost:3000/'],
+    ['https://brainygrasp.com/collections.html', 'https://brainygrasp.com/js/products.js', 'https://brainygrasp.com/'],
+    ['https://www.brainygrasp.com/frontend/index.html', 'https://www.brainygrasp.com/frontend/js/products.js', 'https://www.brainygrasp.com/frontend/'],
+  ]) {
+    const b = browser('frontend/index.html');
+    b.window.location = new URL(page);
+    b.window.BG_CONFIG.API_BASE = 'https://separate-api.example';
+    b.document.currentScript = { src: script };
+    b.run('frontend/js/products.js');
+    for (const product of require('../catalog-products.json')) {
+      const markup = b.context.createProductCard(product);
+      assert.match(markup, /onerror="this.onerror=null;this.src=productImageUrl\(null\)"/);
+      const src = decode(markup.match(/<img src="([^"]+)"/)[1]);
+      assert.equal(src, assetBase + product.image.slice(1));
+      for (const picture of product.details.images) assert.equal(b.context.productImageUrl(picture.src), assetBase + picture.src.slice(1));
+    }
+    const fallback = assetBase + 'images/product-placeholder.svg';
+    assert.equal(b.context.productImageUrl(null), fallback);
+    assert.equal(b.context.productImageUrl('javascript:alert(1)'), fallback);
+    assert.equal(b.context.productImageUrl('https://user:secret@cdn.example/x.png'), fallback);
+    assert.equal(b.context.productImageUrl('https://cdn.example/toy.png?v=2'), 'https://cdn.example/toy.png?v=2');
+  }
+});
+
 test('Collections renders late-arriving products and keeps price filters through edits and deletions', async () => {
   const b = browser('frontend/collections.html');
   b.run('frontend/js/products.js'); b.run('frontend/js/collections.js');

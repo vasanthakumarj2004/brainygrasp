@@ -1,0 +1,15 @@
+**/.git
+**/node_modules
+**/.env
+**/.env.*
+**/*.log
+**/*.pem
+**/*.key
+**/.aws
+**/.codex
+**/.agents
+**/tests
+**/test-results
+**/playwright-report
+**/screenshots
+.vscode

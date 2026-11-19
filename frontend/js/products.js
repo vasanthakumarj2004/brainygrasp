@@ -16,12 +16,21 @@ window.catalogProducts = catalogProducts;
 function catalogEscape(value) {
   return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+// The storefront may be served at / or a nested Live Server directory.
+// Resolve bundled images beside this script, independently of the API origin.
+const catalogAssetBase = document.currentScript?.src
+  ? new URL('../', document.currentScript.src).href
+  : `${window.location.origin}/`;
 function productImageUrl(value) {
-  const fallback = '/images/product-placeholder.svg';
+  const fallback = new URL('images/product-placeholder.svg', catalogAssetBase).href;
   if (typeof value !== 'string' || !value.trim()) return fallback;
   try {
-    const url = new URL(value, window.location.origin);
-    return ['https:', ...(window.location.protocol === 'http:' ? ['http:'] : [])].includes(url.protocol) && !url.username && !url.password ? url.href : fallback;
+    const image = value.trim();
+    const bundled = image.startsWith('/images/') || image.startsWith('images/');
+    const url = new URL(bundled ? image.replace(/^\//, '') : image,
+      bundled ? catalogAssetBase : window.location.origin);
+    const localProtocol = ['http:', 'file:'].includes(window.location.protocol) ? [window.location.protocol] : [];
+    return ['https:', ...localProtocol].includes(url.protocol) && !url.username && !url.password ? url.href : fallback;
   } catch { return fallback; }
 }
 
@@ -56,7 +65,7 @@ function createProductCard(product) {
         <button class="share-btn"><i class="fas fa-share-alt"></i></button>
       </div>
       <div class="product-image">
-        <img src="${catalogEscape(productImageUrl(product.image))}" alt="${catalogEscape(product.name || 'Product')}" loading="lazy" onerror="this.onerror=null;this.src='/images/product-placeholder.svg'">
+        <img src="${catalogEscape(productImageUrl(product.image))}" alt="${catalogEscape(product.name || 'Product')}" loading="lazy" onerror="this.onerror=null;this.src=productImageUrl(null)">
       </div>
       <div class="product-info">
         <div class="product-age-pill">Ages: ${catalogEscape(ageText)}</div>

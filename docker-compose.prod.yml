@@ -1,10 +1,11 @@
-version: '3.8'
-
+# Run from the project directory:
+# docker compose --env-file backend/.env -f docker-compose.prod.yml up -d --build
+# Use a separately secured environment file for a real production deployment.
 services:
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: brainygrasp_api
     restart: always
     ports:
@@ -12,15 +13,19 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:?Set ALLOWED_ORIGINS in backend/.env}
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5500}
-      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-password}@db:5432/${DB_NAME:-brainygras}
-      - REDIS_URL=redis://default:${REDIS_PASSWORD:-redis_password}@redis:6379
-      - JWT_SECRET=${JWT_SECRET:-change_this_secret_in_prod}
+      - SERVE_FRONTEND=true
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:?Set ALLOWED_ORIGINS in the selected environment file}
+      - FRONTEND_URL=${FRONTEND_URL:?Set the HTTPS FRONTEND_URL in the selected environment file}
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:?Set DB_PASSWORD}@db:5432/${DB_NAME:-brainygras}
+      - REDIS_URL=redis://default:${REDIS_PASSWORD:?Set REDIS_PASSWORD}@redis:6379
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET}
       - EMAIL_USER=${EMAIL_USER}
       - EMAIL_PASS=${EMAIL_PASS}
-      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:?Set RAZORPAY_KEY_ID in the selected environment file}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:?Set RAZORPAY_KEY_SECRET in the selected environment file}
+      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET:?Set RAZORPAY_WEBHOOK_SECRET in the selected environment file}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:?Set ADMIN_USERNAME}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?Set ADMIN_PASSWORD}
     depends_on:
       db:
         condition: service_healthy
@@ -33,7 +38,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME:-brainygras}
     ports:
       - "127.0.0.1:5432:5432"
@@ -49,13 +54,13 @@ services:
     image: redis:7-alpine
     container_name: brainygrasp_redis
     restart: always
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password}
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_password}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?Set REDIS_PASSWORD}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
