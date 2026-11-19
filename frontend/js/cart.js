@@ -10,23 +10,9 @@ async function loadAndRenderCartPage() {
   // First render immediately from local storage to prevent any empty flash
   renderCartPage();
 
-  const token = localStorage.getItem('bg_token');
-  if (token) {
-    try {
-      const res = await fetch(`${_cartPageAPIBase}/api/cart`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const dbCart = await res.json();
-        if (Array.isArray(dbCart)) {
-          localStorage.setItem('bg_cart', JSON.stringify(dbCart));
-          // Re-render once fresh DB state is fetched
-          renderCartPage();
-        }
-      }
-    } catch (err) {
-      console.warn('Cart page: could not fetch DB cart, using localStorage:', err);
-    }
+  if (localStorage.getItem('bg_token')) {
+    await window.CartSync.sync();
+    renderCartPage();
   }
 }
 

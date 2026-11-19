@@ -208,6 +208,8 @@ async function initDB() {
       )
     `);
 
+    await require('./cartService').migrateCart(client);
+
     // Security migrations must succeed before accepting payment traffic.
     await require('./paymentSchema').migratePayments(client);
     await require('./shippingSchema').migrateShipping(client);

@@ -12,7 +12,7 @@ const cart = [{ id: 1, name: 'Toy', quantity: 2, price: 500 }];
 const order = { id: 42, orderId: 'order_fixture', key: 'rzp_test_public', amount: 100000, currency: 'INR', items: cart, total: 1000, subtotal: 1000, discount: 0, shipping: 0, promo_code: '', paid: false, pending: false };
 const saved = { id: 42, address: { name: 'Buyer', phone: '9999999999', line1: 'Test Street', city: 'Chennai', state: 'Tamil Nadu', pincode: '600001' }, request: { checkout_key: crypto.randomUUID() } };
 
-async function browser({ attempt, codAttempt, method = 'razorpay', initialCart = cart, respond } = {}) {
+async function browser({ attempt, codAttempt, method = 'razorpay', initialCart = cart, respond, cartSync } = {}) {
   const storage = new Map([['bg_token', 'fixture-token']]);
   if (attempt) storage.set('bg_payment_checkout_1', JSON.stringify(attempt));
   if (codAttempt) storage.set('bg_cod_checkout_1', JSON.stringify(codAttempt));
@@ -44,6 +44,11 @@ async function browser({ attempt, codAttempt, method = 'razorpay', initialCart =
       return { ok: !result.status || result.status < 400, status: result.status || 200, json: async () => result.data };
     }
   };
+  context.window.CartSync = { flush: cartSync || (async () => {
+    const response = await context.fetch('/api/cart');
+    if (!response.ok) throw new Error('Cart could not sync');
+    return response.json();
+  }) };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../frontend/js/checkout_cod.js'), 'utf8'), context);
   await init();
   return { calls, windows, storage, element, click: () => element('btnPlaceOrder').handlers.click(), context };
@@ -155,4 +160,29 @@ test('pre-order delivery rejection unlocks address without opening payment', asy
   await b.click();
   assert.equal(b.storage.has('bg_payment_checkout_1'), false); assert.equal(b.windows.length, 0);
   assert.equal(b.element('codPincode').readOnly, false);
+});
+
+test('checkout waits for the latest cart save before creating an address or payment', async () => {
+  let calls = 0, release;
+  const waiting = new Promise(resolve => { release = resolve; });
+  const b = await browser({ cartSync: async () => {
+    if (++calls > 1) await waiting;
+    return cart;
+  } });
+  const click = b.click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(b.calls.filter(c => c.url === '/api/addresses' || c.url === '/api/payment/create-order').length, 0);
+  release(); await click;
+  assert.equal(b.calls.filter(c => c.url === '/api/payment/create-order').length, 1);
+});
+
+test('checkout blocks payment when cart saving fails', async () => {
+  let calls = 0;
+  const b = await browser({ cartSync: async () => {
+    if (++calls > 1) throw new Error('Cart could not sync');
+    return cart;
+  } });
+  await b.click();
+  assert.equal(b.calls.filter(c => c.url === '/api/addresses' || c.url === '/api/payment/create-order').length, 0);
+  assert.match(b.element('coMsg').textContent, /could not sync/);
 });

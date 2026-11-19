@@ -96,7 +96,7 @@ function showLogoutConfirmModal() {
  */
 function initCheckoutProtection() {
     // Protect all checkout buttons and links
-    document.addEventListener('click', (e) => {
+    document.addEventListener('click', async (e) => {
         const checkoutLink = e.target.closest('a[href*="checkout"], button[data-action="checkout"], .btn-checkout, #cartPageCheckout, #sidebarCheckoutBtn');
 
         if (checkoutLink) {
@@ -140,6 +140,14 @@ function initCheckoutProtection() {
                 return;
             }
 
+            // Wait for all durable changes before navigating away.
+            if (!await window.CartSync.sync()) {
+                if (!isAuthenticated()) {
+                    localStorage.setItem('redirectAfterLogin', checkoutLink.href || 'checkout_cod.html');
+                    window.location.href = 'login.html';
+                }
+                return;
+            }
             // User is authenticated, proceed to checkout
             const targetUrl = checkoutLink.href || 'checkout_cod.html';
             window.location.href = targetUrl;
@@ -154,68 +162,12 @@ function getLocalCart() {
 }
 
 function clearLocalCart() {
-    localStorage.removeItem('bg_cart');
+    window.CartSync.clearLocal();
 }
 
 // ── Cart Migration: Guest -> Database & Load DB cart into localStorage ───
 async function syncCartOnLogin() {
-    const token = getToken();
-    const guestCart = getLocalCart();
-
-    if (!token) return;
-
-    try {
-        // Step 1: Fetch existing DB cart
-        let dbCart = [];
-        try {
-            const fetchRes = await fetch(`${API_BASE}/api/cart`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (fetchRes.ok) {
-                dbCart = await fetchRes.json() || [];
-            }
-        } catch (err) {
-            console.warn('⚠️ Could not fetch existing DB cart:', err);
-        }
-
-        // Step 2: Merge guest cart into DB cart (avoid duplicates)
-        if (guestCart.length > 0) {
-            const merged = [...dbCart];
-            guestCart.forEach(guestItem => {
-                const existing = merged.find(i => i.id === guestItem.id);
-                if (existing) {
-                    existing.quantity = (existing.quantity || 1) + (guestItem.quantity || 1);
-                } else {
-                    merged.push(guestItem);
-                }
-            });
-            dbCart = merged;
-
-            // Sync merged cart to DB
-            const syncRes = await fetch(`${API_BASE}/api/cart/sync`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ items: dbCart })
-            });
-
-            if (syncRes.ok) {
-                console.log('✅ Guest cart merged & synced to database');
-            } else {
-                console.error('❌ Cart sync failed:', await syncRes.text());
-            }
-        }
-
-        // Step 3: Always load authoritative DB cart into localStorage
-        localStorage.setItem('bg_cart', JSON.stringify(dbCart));
-        console.log('✅ DB cart loaded into localStorage:', dbCart.length, 'items');
-        return true;
-    } catch (err) {
-        console.error('❌ Cart migration error:', err);
-        return false;
-    }
+    return window.CartSync.sync();
 }
 
 // ── Enhanced OTP Verification ────────────────────────────────────────────
@@ -227,7 +179,7 @@ async function handleVerifyOTP() {
     const otp = Array.from(otpBoxes).map(b => b.value).join('');
     const email = document.getElementById('emailInput').value;
 
-    if (otp.length < 6) {
+    if (!isAuthenticated() && otp.length < 6) {
         showAuthError('otpError', 'Please enter the full 6-digit OTP.');
         return;
     }
@@ -238,20 +190,27 @@ async function handleVerifyOTP() {
     }
 
     try {
-        const res = await fetch(`${API_BASE}/api/auth/verify-otp`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, otp })
-        });
-
-        const data = await res.json();
+        // A failed cart save must not require using an already-consumed OTP.
+        let data = { token: getToken(), user: getUser() };
+        if (!data.token || !data.user) {
+            const res = await fetch(`${API_BASE}/api/auth/verify-otp`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, otp })
+            });
+            data = await res.json();
+        }
 
         if (data.token && data.user) {
             // 1. Store JWT + user in localStorage
             storeAuth(data.token, data.user);
 
             // 2. Migrate guest cart → database
-            await syncCartOnLogin();
+            if (!await syncCartOnLogin()) {
+                showAuthError('otpError', 'Signed in, but your cart could not sync. Your items are saved on this device. Retry checkout when connected.');
+                if (verifyBtn) { verifyBtn.disabled = false; verifyBtn.textContent = 'Retry cart sync'; }
+                return;
+            }
 
             // 3. Update UI
             if (typeof updateCartCount === 'function') {

@@ -79,6 +79,19 @@ its trust setting reviewed. No proxy, certificate or AWS change was applied here
 
 ## Verify after restart
 
+Deploy the cart frontend and backend together. Startup creates the additive
+`cart_mutations` table before serving requests; the database user needs permission
+to create this table. Cart updates now send quantity changes with durable request
+IDs instead of replacing a whole basket. Keep the mutation receipts: they prevent
+an offline browser from replaying an already-applied change after checkout.
+An old open browser tab using the previous cart API must refresh after deployment.
+
+Production Compose forwards all `SHIPROCKET_*` settings from the selected
+environment file, including `SHIPROCKET_PACKAGES`. Shipping defaults to disabled.
+Set the credentials, channel, pickup location/PIN, order prefix, packages and
+webhook secret before enabling it; existing startup validation rejects incomplete
+configuration. Razorpay test payments remain ineligible for real prepaid shipments.
+
 From EC2, these checks should pass before testing the public domain:
 
 ```sh

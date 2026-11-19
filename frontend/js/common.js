@@ -249,75 +249,31 @@ function getCart() {
   }
 }
 
-// Sync current localStorage cart to the DB (for logged-in users)
-function syncCartToDB() {
-  const token = localStorage.getItem('bg_token');
-  if (!token) return;
-  const apiBase = (window.BG_CONFIG && window.BG_CONFIG.API_BASE) || '';
-  const cart = getCart();
-  fetch(`${apiBase}/api/cart/sync`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({ items: cart })
-  }).catch(err => console.error('\u274c Failed to sync cart to DB:', err));
-}
+// All mutations go through the durable queue, including removals and clear.
+function syncCartToDB() { return window.CartSync.sync(); }
 window.syncCartToDB = syncCartToDB;
 
 function addToCart(item) {
-  const cart = getCart();
-  const existingItem = cart.find(cartItem => cartItem.id === item.id);
-
-  if (existingItem) {
-    existingItem.quantity = (existingItem.quantity || 1) + 1;
-  } else {
-    cart.push({ ...item, quantity: 1 });
-  }
-
-  localStorage.setItem('bg_cart', JSON.stringify(cart));
-
-  // Sync to DB if user is logged in
-  syncCartToDB();
-
-  // Update cart count / UI
-  if (typeof updateCartCount === 'function') {
-    updateCartCount();
-  }
+  window.CartSync.edit(cart => {
+    const existing = cart.find(entry => Number(entry.id) === Number(item.id));
+    if (existing) existing.quantity = Math.min(100, (existing.quantity || 1) + 1);
+    else cart.push({ ...item, quantity: 1 });
+    return cart;
+  });
 }
-
 function removeFromCart(itemId) {
-  let cart = getCart();
-  cart = cart.filter(item => item.id !== itemId);
-  localStorage.setItem('bg_cart', JSON.stringify(cart));
-
-  // Sync to DB if user is logged in
-  syncCartToDB();
-
-  // Update cart count / UI
-  if (typeof updateCartCount === 'function') {
-    updateCartCount();
-  }
+  window.CartSync.edit(cart => cart.filter(item => Number(item.id) !== Number(itemId)));
 }
-
 function getCartTotal() {
-  const cart = getCart();
-  return cart.reduce((total, item) => total + (item.price * (item.quantity || 1)), 0);
+  return getCart().reduce((total, item) => total + item.price * (item.quantity || 1), 0);
 }
-
-// ── Update quantity of an item in the cart (delta = +1 or -1) ──
 function updateQuantityInCart(itemId, delta) {
-  const cart = getCart();
-  const item = cart.find(i => i.id === itemId);
-  if (!item) return;
-  item.quantity = Math.max(1, (item.quantity || 1) + delta);
-  localStorage.setItem('bg_cart', JSON.stringify(cart));
-  syncCartToDB();
-  if (typeof updateCartCount === 'function') updateCartCount();
+  window.CartSync.edit(cart => {
+    const item = cart.find(entry => Number(entry.id) === Number(itemId));
+    if (item) item.quantity = Math.min(100, Math.max(1, (item.quantity || 1) + delta));
+    return cart;
+  });
 }
-
-// Make functions globally available
 window.getCart = getCart;
 window.addToCart = addToCart;
 window.removeFromCart = removeFromCart;
@@ -338,23 +294,7 @@ window.escapeHTML = escapeHTML;
 
 // === Clear Cart ===
 function clearCart() {
-  localStorage.removeItem('bg_cart');
-
-  // Also sync empty cart to DB if user is logged in
-  const token = localStorage.getItem('bg_token');
-  if (token) {
-    const apiBase = (window.BG_CONFIG && window.BG_CONFIG.API_BASE) || '';
-    fetch(`${apiBase}/api/cart/sync`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ items: [] })
-    }).catch(err => console.error('❌ Failed to clear DB cart:', err));
-  }
-
-  if (typeof updateCartCount === 'function') updateCartCount();
+  window.CartSync.edit(() => []);
 }
 window.clearCart = clearCart;
 
@@ -664,33 +604,9 @@ function initCommerceRoutes() {
 
   });
 
-  // Secure Checkout button → checkout_cod.html
-  const checkoutBtn = document.getElementById('sidebarCheckoutBtn');
-
-  if (checkoutBtn) {
-
-    checkoutBtn.addEventListener('click', (e) => {
-      const cart = typeof getCart === 'function' ? getCart() : [];
-      if (!cart.length) {
-        e.preventDefault();
-        e.stopPropagation();
-        return; // don't navigate or prompt if cart is empty
-      }
-
-      // If the unified auth script is loaded and the user is NOT logged in,
-      // we must NOT redirect here. We let the event bubble up so that
-      // auth-unified.js can intercept it and show the login modal.
-      if (typeof isAuthenticated === 'function' && !isAuthenticated()) {
-        e.preventDefault();
-        return;
-      }
-
-      window.location.href = 'checkout_cod.html';
-    });
-
-  }
-
+  // Checkout navigation belongs to auth-unified.js, which awaits cart saves.
 }
+
 
 function initGlobalLinks() {
 

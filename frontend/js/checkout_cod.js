@@ -104,7 +104,8 @@ function renderSummary() {
 
   activeSubtotal = serverQuote?.subtotal ?? activeCart.reduce((s, i) => s + i.price * (i.quantity || 1), 0);
   shipping = serverQuote?.shipping ?? (activeSubtotal >= 999 ? 0 : 60);
-  promoDiscount = serverQuote?.discount ?? promoDiscount;
+  const promoPercent = { BRAINY10: 10, BRAINY15: 15 }[appliedPromoCode] || 0;
+  promoDiscount = serverQuote?.discount ?? (appliedPromoCode === 'FLAT50' ? 50 : Math.round(activeSubtotal * promoPercent / 100));
   activeTotal = serverQuote?.total ?? (activeSubtotal + shipping - promoDiscount);
   if (activeTotal < 0) activeTotal = 0;
 
@@ -225,20 +226,7 @@ async function prefillProfile(token) {
 
 // ── Load Cart (DB-first) ───────────────────────────────────────
 async function loadCart(token) {
-  try {
-    const res = await fetch(`${API_BASE}/api/cart`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (res.ok) {
-      const db = await res.json();
-      if (db && db.length > 0) {
-        activeCart = db;
-        localStorage.setItem('bg_cart', JSON.stringify(db));
-        return;
-      }
-    }
-  } catch (e) { console.warn('DB cart fallback:', e); }
-  activeCart = typeof getCart === 'function' ? getCart() : [];
+  activeCart = await window.CartSync.flush();
 }
 
 // ── Save Address → Create Order ────────────────────────────────
@@ -312,11 +300,9 @@ async function saveAddress(token, addr) {
   });
 }
 async function refreshCartAfterOrder(token) {
-  // The server removes only purchased quantities. Never sync an empty cart back.
-  localStorage.removeItem('bg_cart');
+  // The server removes only purchased quantities; drain newer edits safely.
   try {
-    const cart = await apiRequest('/api/cart', token);
-    localStorage.setItem('bg_cart', JSON.stringify(cart));
+    await window.CartSync.flush();
   } catch { /* The next page will fetch the server cart. */ }
 }
 async function finishOnlineOrder(token, order) {
@@ -349,6 +335,9 @@ async function placeOrder(token, payMethod) {
   btn.textContent = 'Processing...';
   try {
     if (!attempt) {
+      await loadCart(token);
+      serverQuote = null;
+      if (!renderSummary()) throw new Error('Your cart is empty. Add items before checking out.');
       const address = await saveAddress(token, addr);
       attempt = { address: addr, items: activeCart, total: activeTotal, request: {
         checkout_key: crypto.randomUUID(), address_id: address.id,
@@ -430,6 +419,9 @@ async function startRazorpay(token) {
   try {
     if (typeof Razorpay !== 'function') throw new Error('The payment window could not load. Please refresh and try again.');
     if (!attempt) {
+      await loadCart(token);
+      serverQuote = null;
+      if (!renderSummary()) throw new Error('Your cart is empty. Add items before checking out.');
       const address = await saveAddress(token, addr);
       attempt = {
         address: addr,
@@ -511,10 +503,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // 2. Parallel load: profile + cart
-  const [profileOk] = await Promise.all([
-    prefillProfile(token),
-    loadCart(token)
-  ]);
+  let profileOk;
+  try {
+    [profileOk] = await Promise.all([prefillProfile(token), loadCart(token)]);
+  } catch (err) {
+    showMsg('Your cart could not sync. Your changes are saved on this device. Refresh to retry.');
+    document.getElementById('btnPlaceOrder').disabled = true;
+    return;
+  }
   if (profileOk === false) return;
 
   // Recover after reload even when the webhook already removed purchased cart items.
