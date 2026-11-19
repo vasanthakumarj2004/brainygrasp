@@ -24,7 +24,7 @@ function browser() {
     const redirects = [], calls = [];
     let responder = async url => ({ ok: true, status: 200, json: async () => url.includes('/auth/me') ? profile : [order] });
     const context = vm.createContext({
-        window: { BG_CONFIG: { API_BASE: '' }, location: { replace: url => redirects.push(url) }, addEventListener: (name, fn) => { windowHandlers[name] = fn; } },
+        window: { BG_CONFIG: { API_BASE: '' }, CustomerValidation: require('../../frontend/js/customer-validation'), location: { replace: url => redirects.push(url) }, addEventListener: (name, fn) => { windowHandlers[name] = fn; } },
         document, console, AbortController, Intl, Date,
         localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
         setTimeout: () => ++timerId, clearTimeout() {},
@@ -145,7 +145,7 @@ function routeModule(file, dependencies) {
     const module = { exports: {} };
     vm.runInNewContext(fs.readFileSync(path.join(root, 'backend/routes', file), 'utf8'), {
         module, exports: module.exports, console, process: { env: {} },
-        require: name => name === 'express' ? { Router: () => router } : dependencies[name] || {}
+        require: name => name === 'express' ? { Router: () => router } : name === '../../frontend/js/customer-validation' ? require('../../frontend/js/customer-validation') : dependencies[name] || {}
     });
     return routes;
 }
@@ -191,7 +191,8 @@ test('courier webhook processing reaches fresh customer orders without stale cac
             if (q.startsWith('SELECT * FROM orders WHERE awb_number')) return { rows: stored.awb_number === args[0] ? [stored] : [] };
             if (q.startsWith('UPDATE orders SET status')) {
                 stored = { ...stored, status: args[1], tracking_status: args[2], estimated_delivery: args[3] || stored.estimated_delivery,
-                    courier_name: args[4] || stored.courier_name, tracking_event_at: args[5] || stored.tracking_event_at };
+                    courier_name: args[4] || stored.courier_name, tracking_event_at: args[5] || stored.tracking_event_at,
+                    delivery_date: stored.delivery_date || args[6] };
                 return { rows: [stored] };
             }
             if (q.startsWith("UPDATE delivery_events SET state='processed'")) { inbox.get(args[0]).state = 'processed'; return { rows: [] }; }
@@ -218,4 +219,78 @@ test('courier webhook processing reaches fresh customer orders without stale cac
     await b.context.loadOrders();
     assert.match(b.elements.get('historyOrdersList').innerHTML, /Delivered/);
     assert.match(b.elements.get('trackingDetails').innerHTML, /Delivery progress: Delivered/);
+    assert.equal(stored.delivery_date, '2026-11-14');
+});
+
+test('profile saves normalize phone and reload from the database despite stale Redis', async () => {
+    let stored = { ...profile }, cacheReads = 0;
+    const queries = [];
+    const routes = routeModule('auth.js', {
+        '../db': { query: async (sql, args) => {
+            queries.push({ sql, args });
+            if (sql.startsWith('SELECT phone')) return { rows: [{ phone: stored.phone }] };
+            if (sql.startsWith('SELECT id FROM')) return { rows: [] };
+            if (sql.includes('UPDATE users')) {
+                stored = { ...stored, name: args[0], phone: args[2], address: args[3], city: args[4], state: args[5], pincode: args[6], country: args[7] };
+            }
+            return { rows: [stored] };
+        } },
+        '../redisClient': { getCached: async () => { cacheReads++; return profile; }, deleteCache: async () => false }
+    });
+    const save = response();
+    await routes['put /api/auth/profile']({ user: { id: 1 }, body: { ...profile, name: 'Saved Name', phone: '+91 98765 43210' } }, save);
+    assert.equal(save.body.success, true);
+    assert.equal(stored.phone, '9876543210');
+    const reload = response();
+    await routes['get /api/auth/me']({ user: { id: 1 } }, reload);
+    assert.equal(reload.body.name, 'Saved Name');
+    assert.equal(cacheReads, 0);
+    assert.equal(reload.headers['Cache-Control'], 'private, no-store');
+    assert.equal(queries.find(q => q.sql.includes('UPDATE users')).args[8], 1);
+});
+
+test('profile limits reject values that exceed database or delivery address limits', async () => {
+    let queried = false;
+    const routes = routeModule('auth.js', { '../db': { query: async () => { queried = true; } } });
+    for (const fields of [{ gender: 'x'.repeat(21) }, { pincode: 'x'.repeat(11), country: 'Other' }, { address: 'x'.repeat(256) }]) {
+        const res = response();
+        await routes['put /api/auth/profile']({ user: { id: 1 }, body: { name: 'Name', ...fields } }, res);
+        assert.equal(res.statusCode, 400);
+    }
+    assert.equal(queried, false);
+});
+
+test('profile client sends normalized values and checkout accepts the same phone', async () => {
+    const b = browser(); await b.ready();
+    const form = b.elements.get('profileEditForm');
+    form.fields = { ...profile, phone: '+91 98765 43210' };
+    b.respond(async (_, options) => ({ ok: true, json: async () => ({ success: true, user: { ...profile, ...JSON.parse(options.body) } }) }));
+    await form.onsubmit({ preventDefault() {}, target: form });
+    assert.equal(JSON.parse(b.calls.at(-1).options.body).phone, '9876543210');
+    const { validateAddress } = require('../checkoutService');
+    assert.equal(validateAddress({ full_name: profile.name, phone: form.fields.phone, line1: profile.address,
+        city: profile.city, state: profile.state, pincode: profile.pincode }).phone, '9876543210');
+});
+
+test('order cards show saved totals, verified payment and dates without inferring COD collection', async () => {
+    const b = browser(); await b.ready();
+    b.context.renderOrders([{ ...order, subtotal: 950, shipping: 50, discount: 100,
+        payment_method: 'razorpay', payment_verified_at: '2026-11-14T06:00:00Z', payment_id: 'pay_fixture',
+        expected_delivery: '2026-11-20', delivery_date: '2026-11-19' }], 'history');
+    const html = b.elements.get('historyOrdersList').innerHTML;
+    for (const text of ['Subtotal', 'Shipping', 'Discount', 'Payment verified', 'pay_fixture', 'Delivered on:', '20 Nov 2026']) assert.ok(html.includes(text), text);
+    assert.equal(b.context.paymentLabel({ ...order, payment_method: 'cod', status: 'Delivered' }), 'Cash on delivery');
+    assert.equal(b.context.paymentLabel({ ...order, payment_method: 'razorpay', payment_id: 'pay_unverified' }), 'Payment not verified');
+    assert.equal(b.context.savedAmount(undefined), 'Not available');
+});
+
+test('courier exceptions show a notice and latest raw status without normal progress', async () => {
+    const b = browser(); await b.ready();
+    for (const status of ['UNDELIVERED', 'DELAYED', 'PICKUP_ERROR', 'PICKUP EXCEPTION']) {
+        const html = b.context.renderTrackingBar({ ...order, tracking_status: status });
+        assert.ok(html.includes(status));
+        assert.ok(html.includes('tracking-note'));
+        assert.ok(!html.includes('tracking-steps'));
+    }
+    assert.equal(vm.runInContext("isHistory({ status: 'Damaged' })", b.context), true);
 });

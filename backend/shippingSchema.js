@@ -9,7 +9,10 @@ async function migrateShipping(db) {
     ADD COLUMN IF NOT EXISTS shipping_snapshot JSONB,
     ADD COLUMN IF NOT EXISTS awb_number VARCHAR(100), ADD COLUMN IF NOT EXISTS courier_name VARCHAR(100),
     ADD COLUMN IF NOT EXISTS tracking_status VARCHAR(100), ADD COLUMN IF NOT EXISTS estimated_delivery DATE,
-    ADD COLUMN IF NOT EXISTS tracking_event_at TIMESTAMPTZ`);
+    ADD COLUMN IF NOT EXISTS tracking_event_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS delivery_date DATE`);
+  // Older deployments created this column with a smaller limit.
+  await db.query('ALTER TABLE orders ALTER COLUMN tracking_status TYPE VARCHAR(100)');
   await db.query(`CREATE TABLE IF NOT EXISTS shipping_jobs (
     order_id INTEGER PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
     state TEXT NOT NULL DEFAULT 'awaiting_parcel', phase TEXT NOT NULL DEFAULT 'new',

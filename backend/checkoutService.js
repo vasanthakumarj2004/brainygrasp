@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { ShippingError } = require('./shippingPolicy');
 const { confirmationJob } = require('./shippingCheckout');
+const { normalizePhone } = require('../frontend/js/customer-validation');
 
 class CheckoutError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -25,7 +26,7 @@ function positiveId(value) {
 }
 
 function validateAddress(input = {}) {
-  const limits = { full_name: 100, phone: 20, line1: 255, city: 100, state: 100, pincode: 10 };
+  const limits = { full_name: 100, phone: 40, line1: 255, city: 100, state: 100, pincode: 6 };
   const address = {};
   for (const [key, max] of Object.entries(limits)) {
     if (typeof input[key] !== 'string' || !input[key].trim() || input[key].trim().length > max) {
@@ -33,7 +34,8 @@ function validateAddress(input = {}) {
     }
     address[key] = input[key].trim();
   }
-  if (!/^\d{10}$/.test(address.phone) || !/^\d{6}$/.test(address.pincode)) {
+  address.phone = normalizePhone(address.phone);
+  if (!address.phone || !/^[1-9]\d{5}$/.test(address.pincode)) {
     throw new CheckoutError(400, 'Invalid delivery phone number or PIN code');
   }
   return address;
@@ -77,8 +79,7 @@ async function quote(db, input = {}) {
 async function ownedAddress(db, userId, addressId) {
   const { rows } = await db.query('SELECT * FROM addresses WHERE id = $1 AND user_id = $2', [positiveId(addressId), userId]);
   if (!rows[0]) throw new CheckoutError(400, 'Delivery address does not belong to this account');
-  validateAddress(rows[0]);
-  return rows[0];
+  return { ...rows[0], ...validateAddress(rows[0]) };
 }
 
 async function affiliate(db, ref) {

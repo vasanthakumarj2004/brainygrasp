@@ -114,6 +114,12 @@ measurements. Follow the normal database backup and deployment procedure.
 
 ## Webhooks
 
+Run `npm run shipping:check` from `backend` to check local configuration without
+printing secrets or creating shipments. A successful check verifies settings only;
+it does not prove provider credentials or dashboard webhook registration. Missing
+settings are listed by name. For separate API hosting, use the backend's public
+HTTPS URL for the webhook, regardless of the storefront URL.
+
 - Shiprocket: **POST `https://YOUR_BACKEND/api/delivery-events`**, enabled in
   Settings > API > Webhooks, security token sent as **`x-api-key`** matching
   `SHIPROCKET_WEBHOOK_SECRET`. Do not put it in a query string or use the obsolete
@@ -125,6 +131,20 @@ measurements. Follow the normal database backup and deployment procedure.
 The Shiprocket webhook is acknowledged only after the tracking event is stored.
 The worker applies events, handles duplicates and avoids regressing terminal
 delivery states. See `PAYMENTS_SETUP.md` for payment configuration details.
+
+New courier exceptions (including Undelivered, Delayed and Pickup Error) are saved
+as the latest courier status even if they do not advance a delivery stage. Unknown
+future statuses are also preserved on active orders. Older timestamped events cannot overwrite a
+newer update. Delivered events save the actual delivery date in Indian local time
+when the courier supplies a timestamp; absent timestamps do not fabricate a date.
+The additive migration also widens legacy `tracking_status` columns to 100 characters.
+
+The dashboard reads saved order/tracking data every 30 seconds while visible;
+the worker processes webhook events every 15 seconds. Customer Refresh reads the
+database; Admin > Refresh tracking can query Shiprocket directly. Monitor worker
+uptime and webhook delivery failures. Deploy the dashboard, shared validation
+script and backend together. Profile reads now bypass Redis, and existing order
+addresses remain unchanged when a customer edits their profile.
 
 ## Admin operations
 

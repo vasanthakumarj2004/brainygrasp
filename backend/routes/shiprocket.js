@@ -19,5 +19,8 @@ router.post('/api/delivery-events', async (req, res) => {
     res.status(err instanceof ShippingError ? err.status : 503).json({ error: err instanceof ShippingError ? err.message : 'Tracking event could not be saved. Retry delivery.' });
   }
 });
-router.get('/api/delivery-events', (req,res) => res.json({ status: 'Delivery webhook endpoint is active' }));
+router.get('/api/delivery-events', (req,res) => {
+  const configured = validWebhookKey(process.env.SHIPROCKET_WEBHOOK_SECRET, process.env.SHIPROCKET_WEBHOOK_SECRET);
+  res.json({ status: configured ? 'Webhook token configured; delivery has not been verified' : 'Webhook token is not configured', configured });
+});
 module.exports = router;

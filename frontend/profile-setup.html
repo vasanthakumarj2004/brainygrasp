@@ -283,7 +283,7 @@
                 <!-- Full Name -->
                 <div class="form-group full-width">
                     <label for="fullName">Full Name <span class="required">*</span></label>
-                    <input type="text" id="fullName" name="fullName" required placeholder="e.g. Vasanth Kumar">
+                    <input type="text" id="fullName" name="fullName" required placeholder="e.g. Vasanth Kumar" maxlength="100">
                     <div class="error-message" id="nameError"></div>
                 </div>
 
@@ -310,35 +310,35 @@
                 <!-- Phone -->
                 <div class="form-group full-width">
                     <label for="phone">Phone Number <span class="required">*</span></label>
-                    <input type="tel" id="phone" name="phone" required placeholder="Enter 10-digit number">
+                    <input type="tel" id="phone" name="phone" required placeholder="Enter 10-digit number" maxlength="40">
                     <div class="error-message" id="phoneError"></div>
                 </div>
 
                 <!-- Address -->
                 <div class="form-group full-width">
                     <label for="address">Street Address <span class="required">*</span></label>
-                    <textarea id="address" name="address" rows="2" required placeholder="Door No, Street Name..."></textarea>
+                    <textarea id="address" name="address" rows="2" required placeholder="Door No, Street Name..." maxlength="255"></textarea>
                     <div class="error-message" id="addressError"></div>
                 </div>
 
                 <!-- City -->
                 <div class="form-group">
                     <label for="city">City <span class="required">*</span></label>
-                    <input type="text" id="city" name="city" required placeholder="City">
+                    <input type="text" id="city" name="city" required placeholder="City" maxlength="100">
                     <div class="error-message" id="cityError"></div>
                 </div>
 
                 <!-- State -->
                 <div class="form-group">
                     <label for="state">State <span class="required">*</span></label>
-                    <input type="text" id="state" name="state" required placeholder="State">
+                    <input type="text" id="state" name="state" required placeholder="State" maxlength="100">
                     <div class="error-message" id="stateError"></div>
                 </div>
 
                 <!-- PIN -->
                 <div class="form-group">
                     <label for="pincode">PIN Code <span class="required">*</span></label>
-                    <input type="text" id="pincode" name="pincode" required placeholder="6-digit PIN">
+                    <input type="text" id="pincode" name="pincode" required placeholder="6-digit PIN" maxlength="6">
                     <div class="error-message" id="pincodeError"></div>
                 </div>
 
@@ -364,6 +364,7 @@
     </div>
 
     <script src="js/config.js"></script>
+    <script src="js/customer-validation.js"></script>
   <script src="js/cart-sync.js"></script>
   <script src="js/auth-unified.js"></script>
     <script>
@@ -447,7 +448,7 @@
                             'Content-Type': 'application/json',
                             'Authorization': `Bearer ${token}`
                         },
-                        body: JSON.stringify(formData)
+                        body: JSON.stringify(window.CustomerValidation.profile(formData))
                     });
 
                     const data = await response.json();
@@ -469,7 +470,7 @@
                         throw new Error(data.error || 'Save failed');
                     }
                 } catch (err) {
-                    alert('Error saving profile. Please try again.');
+                    showAuthError('profileSaveError', err.message || 'Error saving profile. Please try again.');
                     saveBtn.disabled = false;
                     saveBtn.textContent = 'Save & Continue';
                 }

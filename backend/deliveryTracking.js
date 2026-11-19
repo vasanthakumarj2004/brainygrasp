@@ -1,10 +1,10 @@
 'use strict';
 
 const crypto = require('crypto');
-const { ShippingError, mapShiprocketStatus, nextTrackingStatus, eventTime } = require('./shippingPolicy');
+const { ShippingError, mapShiprocketStatus, nextTrackingStatus, eventTime, terminalTrackingStatuses } = require('./shippingPolicy');
 
 function validWebhookKey(provided, secret) {
-  if (typeof secret !== 'string' || secret.length < 32 || typeof provided !== 'string') return false;
+  if (typeof secret !== 'string' || secret.length < 32 || /replace_with|your_/i.test(secret) || typeof provided !== 'string') return false;
   const a = Buffer.from(provided), b = Buffer.from(secret);
   return a.length === b.length && crypto.timingSafeEqual(a,b);
 }
@@ -16,7 +16,8 @@ function trackingEvent(payload) {
     typeof courierName !== 'string' || courierName.length > 100) throw new ShippingError('webhook_payload', 'Invalid tracking payload.', { status: 400 });
   const etd = payload.etd || payload.estimated_delivery_date || payload.estimatedDelivery;
   const date = typeof etd === 'string' && /^\d{4}-\d{2}-\d{2}/.test(etd) ? etd.slice(0,10) : null;
-  return { awb, srStatus: srStatus.trim(), courierName, estimatedDelivery: date && Number.isFinite(Date.parse(date)) ? date : null,
+  const validDate = date && Number.isFinite(Date.parse(date)) && new Date(date).toISOString().slice(0, 10) === date;
+  return { awb, srStatus: srStatus.trim(), courierName, estimatedDelivery: validDate ? date : null,
     eventAt: eventTime(payload.current_timestamp || payload.eventAt) };
 }
 
@@ -33,12 +34,19 @@ function createDeliveryTracking({ pool, invalidate = async () => {} }) {
     if (rows.length !== 1 || (expectedOrderId && rows[0].id !== expectedOrderId)) throw new ShippingError('unknown_awb', 'Tracking order has not been matched yet.', { retryable: true });
     const order = rows[0];
     if (event.eventAt && order.tracking_event_at && new Date(event.eventAt) <= new Date(order.tracking_event_at)) return order;
-    const status = nextTrackingStatus(order.status, mapShiprocketStatus(event.srStatus));
-    if (!status) return order;
+    const mapped = mapShiprocketStatus(event.srStatus);
+    if (order.status === 'Payment Pending') return order;
+    if (terminalTrackingStatuses.has(order.status) && mapped !== order.status) return order;
+    // Courier exceptions and future statuses are useful even when they do not
+    // advance a delivery stage. Store the raw status without inventing progress.
+    const status = nextTrackingStatus(order.status, mapped) || order.status;
+    const deliveredDate = mapped === 'Delivered' && event.eventAt
+      ? new Date(new Date(event.eventAt).getTime() + 330 * 60000).toISOString().slice(0, 10) : null;
     const result = await db.query(`UPDATE orders SET status=$2, tracking_status=$3,
       estimated_delivery=COALESCE($4,estimated_delivery), courier_name=COALESCE(NULLIF($5,''),courier_name),
-      tracking_event_at=COALESCE($6,tracking_event_at) WHERE id=$1 RETURNING *`,
-    [order.id, status, event.srStatus, event.estimatedDelivery, event.courierName, event.eventAt]);
+      tracking_event_at=COALESCE($6,tracking_event_at),
+      delivery_date=COALESCE(delivery_date,$7::date) WHERE id=$1 RETURNING *`,
+    [order.id, status, event.srStatus, event.estimatedDelivery, event.courierName, event.eventAt, deliveredDate]);
     return result.rows[0];
   }
   async function refresh(id, payload) {

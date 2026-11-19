@@ -23,6 +23,7 @@ const { getCached, setCache, deleteCache, CACHE_KEYS, TTL } = require('../redisC
 const { authenticateToken } = require('../middleware/auth');
 
 const SECRET_KEY = process.env.JWT_SECRET;
+const { profile: validateProfile } = require('../../frontend/js/customer-validation');
 
 
 const { otpLimiter } = require('../middleware/rateLimiters');
@@ -102,15 +103,12 @@ router.post('/api/auth/verify-otp', async (req, res) => {
 
 // 3. Get User Profile
 router.get('/api/auth/me', authenticateToken, async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
   try {
-    const cachedProfile = await getCached(CACHE_KEYS.USER_PROFILE(req.user.id));
-    if (cachedProfile) return res.json(cachedProfile);
-
     const result = await pool.query('SELECT id, name, email, phone, gender, address, city, state, pincode, country, profile_completed, created_at FROM users WHERE id=$1', [req.user.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
 
     const profile = result.rows[0];
-    await setCache(CACHE_KEYS.USER_PROFILE(req.user.id), profile, TTL.USER_PROFILE);
     res.json(profile);
   } catch (err) {
     console.error('Profile fetch error:', err);
@@ -120,47 +118,24 @@ router.get('/api/auth/me', authenticateToken, async (req, res) => {
 
 // 4. Save/Update User Profile
 const handleProfileSave = async (req, res) => {
-  const fields = { name: 100, gender: 30, phone: 24, address: 1000, city: 100, state: 100, pincode: 12, country: 80 };
-  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
-    return res.status(400).json({ error: 'Profile details are required' });
-  }
-  for (const [field, limit] of Object.entries(fields)) {
-    const value = req.body[field];
-    if (value != null && (typeof value !== 'string' || value.trim().length > limit)) {
-      return res.status(400).json({ error: `Invalid ${field}` });
-    }
-  }
-  const { name, gender, phone, address, city, state, pincode, country } = req.body;
-  if (phone?.trim() && (!/^[+\d\s()-]+$/.test(phone) || !/^\d{7,15}$/.test(phone.replace(/\D/g, '')))) {
-    return res.status(400).json({ error: 'Enter a valid phone number with 7 to 15 digits' });
-  }
-  if (pincode?.trim() && (country?.trim() || 'India').toLowerCase() === 'india' && !/^[1-9]\d{5}$/.test(pincode.trim())) {
-    return res.status(400).json({ error: 'Enter a valid 6-digit Indian PIN code' });
-  }
+  let clean;
+  try { clean = validateProfile(req.body); }
+  catch (err) { return res.status(400).json({ error: err.message }); }
+  const { name: cleanName, gender: cleanGender, phone: cleanPhone, address: cleanAddress,
+    city: cleanCity, state: cleanState, pincode: cleanPincode, country: cleanCountry } = clean;
 
   try {
-    if (!name || !name.trim()) {
-      return res.status(400).json({ error: 'Full name is required' });
-    }
-
     const currentUser = await pool.query('SELECT phone FROM users WHERE id=$1', [req.user.id]);
-    const currentPhone = currentUser.rows[0]?.phone;
+    if (!currentUser.rows[0]) return res.status(404).json({ error: 'User not found' });
+    const currentPhone = currentUser.rows[0].phone;
 
-    const cleanPhone = phone ? phone.trim() : null;
     if (cleanPhone && cleanPhone !== currentPhone) {
-      const phoneCheck = await pool.query('SELECT id FROM users WHERE phone=$1 AND id != $2', [cleanPhone, req.user.id]);
+      const variants = cleanCountry.toLowerCase() === 'india' ? [cleanPhone, '91' + cleanPhone, '0' + cleanPhone] : [cleanPhone.replace(/\D/g, '')];
+      const phoneCheck = await pool.query("SELECT id FROM users WHERE id != $2 AND (phone=$1 OR regexp_replace(phone, '[^0-9]', '', 'g') = ANY($3::text[]))", [cleanPhone, req.user.id, variants]);
       if (phoneCheck.rows.length > 0) {
         return res.status(400).json({ error: 'Phone number is already in use by another account' });
       }
     }
-
-    const cleanName = name.trim();
-    const cleanGender = gender ? gender.trim() : null;
-    const cleanAddress = address ? address.trim() : null;
-    const cleanCity = city ? city.trim() : null;
-    const cleanState = state ? state.trim() : null;
-    const cleanPincode = pincode ? pincode.trim() : null;
-    const cleanCountry = country ? country.trim() : 'India';
 
     const result = await pool.query(`
       UPDATE users 
@@ -173,7 +148,7 @@ const handleProfileSave = async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    await deleteCache(CACHE_KEYS.USER_PROFILE(req.user.id));
+    // Profile reads use PostgreSQL; a cache outage cannot revert a saved edit.
     res.json({ success: true, message: 'Profile updated successfully', user: result.rows[0] });
   } catch (err) {
     console.error('Profile save error:', err);

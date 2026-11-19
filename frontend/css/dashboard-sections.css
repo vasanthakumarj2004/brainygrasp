@@ -14,6 +14,11 @@ main.dashboard-main { margin-top: 0 !important; }
 .orders-panel > .card { box-shadow: none; padding: 0; }
 .order-topline { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .order-price { font-weight: 800; font-size: 1.15rem; }
+.order-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; margin: 14px 0; font-size: .9rem; }
+.order-summary > div { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; }
+.order-summary dt { color: #636e72; }
+.order-summary dd { margin: 0; font-weight: 700; }
+@media (max-width: 480px) { .order-summary { grid-template-columns: 1fr; } }
 .order-address { margin-top: 12px; padding-top: 12px; border-top: 1px solid #ddd; font-size: .85rem; color: #636e72; }
 .order-track { margin-top: 14px; }
 .detail-value, .order-card, .tracking-meta, #trackingDetails { overflow-wrap: anywhere; }

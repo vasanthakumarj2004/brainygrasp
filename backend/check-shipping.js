@@ -1,0 +1,10 @@
+'use strict';
+require('dotenv').config({ path: require('path').join(__dirname, '.env'), quiet: true });
+const report = require('./shippingReadiness').shippingReadiness(process.env);
+console.log('Shipping enabled: ' + (report.enabled ? 'yes' : 'no'));
+for (const check of report.checks) console.log(`${check.ok ? 'OK' : 'MISSING / INVALID'}: ${check.name}`);
+if (report.missing.length) console.log('Required settings: ' + report.missing.join(', '));
+console.log('Live prepaid shipping key: ' + (report.prepaidLiveKey ? 'present (credentials not verified)' : 'not configured; test payments cannot ship'));
+console.log('Register POST /api/delivery-events on the public HTTPS backend in Shiprocket Settings > API > Webhooks. Enable it and set x-api-key to SHIPROCKET_WEBHOOK_SECRET.');
+console.log('This check does not authenticate with Shiprocket, send a webhook, create shipments, or change settings. Verify an authenticated delivery event and worker processing after deployment.');
+if (!report.configured) process.exitCode = 1;

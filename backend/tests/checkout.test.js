@@ -29,7 +29,7 @@ async function browser({ attempt, codAttempt, method = 'razorpay', initialCart =
     console, AbortController, crypto: { randomUUID: crypto.randomUUID },
     setTimeout: () => 0, clearTimeout() {}, requestAnimationFrame: fn => fn(),
     localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
-    window: { BG_CONFIG: { API_BASE: '' }, location: {} },
+    window: { BG_CONFIG: { API_BASE: '' }, location: {}, CustomerValidation: require('../../frontend/js/customer-validation') },
     document: { getElementById: element, querySelector: () => radio, querySelectorAll: () => [radio], addEventListener: (event, fn) => { init = fn; } },
     Razorpay: class {
       constructor(options) { this.options = options; this.handlers = {}; windows.push(this); }

@@ -77,13 +77,17 @@ function validateAddress(a) {
     showMsg('⚠️ Please fill all delivery address fields.');
     return false;
   }
-  if (!/^\d{10}$/.test(a.phone)) {
+  a.phone = window.CustomerValidation.normalizePhone(a.phone);
+  if (!a.phone) {
     showMsg('⚠️ Enter a valid 10-digit phone number.');
     return false;
   }
-  if (!/^\d{6}$/.test(a.pincode)) {
+  if (!/^[1-9]\d{5}$/.test(a.pincode)) {
     showMsg('⚠️ Enter a valid 6-digit PIN code.');
     return false;
+  }
+  for (const [key, max] of Object.entries({ name: 100, line1: 255, city: 100, state: 100 })) {
+    if (a[key].length > max) { showMsg(`Please shorten ${key} to ${max} characters.`); return false; }
   }
   return true;
 }
@@ -623,14 +627,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener('input', () => {
-      el.style.borderColor = /^\d{10}$/.test(el.value) ? 'var(--green)' : '';
+      el.style.borderColor = window.CustomerValidation.normalizePhone(el.value) ? 'var(--green)' : '';
     });
   });
   ['codPincode', 'newPincode'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener('input', () => {
-      el.style.borderColor = /^\d{6}$/.test(el.value) ? 'var(--green)' : '';
+      el.style.borderColor = /^[1-9]\d{5}$/.test(el.value) ? 'var(--green)' : '';
     });
   });
 });

@@ -64,12 +64,16 @@ const statusMap = { NEW: 'Placed', 'AWB ASSIGNED': 'Confirmed', 'PENDING PICKUP'
   'PICKUP SCHEDULED': 'Confirmed', 'PICKUP QUEUED': 'Confirmed', 'PICKUP BOOKED': 'Confirmed', 'OUT FOR PICKUP': 'Confirmed',
   'PICKED UP': 'Shipped', SHIPPED: 'Shipped', 'IN TRANSIT': 'Shipped', 'REACHED DESTINATION': 'Shipped', 'REACHED AT DESTINATION HUB': 'Shipped',
   'OUT FOR DELIVERY': 'Out for Delivery', DELIVERED: 'Delivered', CANCELED: 'Cancelled', CANCELLED: 'Cancelled',
-  'CANCELLED BEFORE DISPATCHED': 'Cancelled', 'RTO INITIATED': 'RTO', 'RTO IN TRANSIT': 'RTO', 'RTO DELIVERED': 'RTO', LOST: 'RTO', DAMAGED: 'RTO' };
+  'CANCELLED BEFORE DISPATCHED': 'Cancelled', 'RTO INITIATED': 'RTO', 'RTO IN TRANSIT': 'RTO', 'RTO DELIVERED': 'RTO',
+  'RTO NDR': 'RTO', 'RTO OFD': 'RTO', 'RTO ACKNOWLEDGED': 'RTO', 'RTO IN INTRANSIT': 'RTO',
+  'LABEL GENERATED': 'Confirmed', 'MANIFEST GENERATED': 'Confirmed',
+  LOST: 'Lost', DAMAGED: 'Damaged', DESTROYED: 'Destroyed' };
+const terminalTrackingStatuses = new Set(['Delivered', 'Cancelled', 'RTO', 'Lost', 'Damaged', 'Destroyed']);
 function mapShiprocketStatus(value) { return statusMap[String(value || '').trim().toUpperCase().replace(/_/g, ' ')] || null; }
 function nextTrackingStatus(current, incoming) {
   if (!incoming || current === 'Payment Pending') return null;
-  if (['Delivered', 'Cancelled', 'RTO'].includes(current)) return incoming === current ? current : null;
-  const rank = { Placed: 0, Paid: 0, Confirmed: 1, Shipped: 2, 'Out for Delivery': 3, Delivered: 4, Cancelled: 4, RTO: 4 };
+  if (terminalTrackingStatuses.has(current)) return incoming === current ? current : null;
+  const rank = { Placed: 0, Paid: 0, Confirmed: 1, Shipped: 2, 'Out for Delivery': 3, Delivered: 4, Cancelled: 4, RTO: 4, Lost: 4, Damaged: 4, Destroyed: 4 };
   return rank[incoming] >= (rank[current] ?? 0) ? incoming : null;
 }
 function eventTime(value) {
@@ -80,4 +84,4 @@ function eventTime(value) {
   const time = new Date(iso);
   return Number.isFinite(time.getTime()) ? time.toISOString() : null;
 }
-module.exports = { ShippingError, shippingConfig, eligibleOrder, eligibleBooking, parcelDetails, orderAmounts, mapShiprocketStatus, nextTrackingStatus, eventTime };
+module.exports = { ShippingError, shippingConfig, eligibleOrder, eligibleBooking, parcelDetails, orderAmounts, mapShiprocketStatus, nextTrackingStatus, eventTime, terminalTrackingStatuses };

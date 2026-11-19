@@ -757,31 +757,31 @@
                 <!-- Phone -->
                 <div class="form-group">
                     <label for="editPhone">Phone Number</label>
-                    <input type="tel" id="editPhone" name="phone" placeholder="Mobile number, including country code if needed" maxlength="24" autocomplete="tel">
+                    <input type="tel" id="editPhone" name="phone" placeholder="Mobile number, including country code if needed" autocomplete="tel" maxlength="40">
                 </div>
 
                 <!-- Address -->
                 <div class="form-group">
                     <label for="editAddress">Street Address</label>
-                    <textarea id="editAddress" name="address" rows="2" placeholder="Door No, Street Name..."></textarea>
+                    <textarea id="editAddress" name="address" rows="2" placeholder="Door No, Street Name..." maxlength="255"></textarea>
                 </div>
 
                 <!-- City + State -->
                 <div class="form-grid-2">
                     <div class="form-group">
                         <label for="editCity">City</label>
-                        <input type="text" id="editCity" name="city" placeholder="City">
+                        <input type="text" id="editCity" name="city" placeholder="City" maxlength="100">
                     </div>
                     <div class="form-group">
                         <label for="editState">State</label>
-                        <input type="text" id="editState" name="state" placeholder="State">
+                        <input type="text" id="editState" name="state" placeholder="State" maxlength="100">
                     </div>
                 </div>
 
                 <!-- Pincode -->
                 <div class="form-group">
                     <label for="editPincode">PIN Code</label>
-                    <input type="text" id="editPincode" name="pincode" placeholder="Postal / PIN code" maxlength="12" autocomplete="postal-code">
+                    <input type="text" id="editPincode" name="pincode" placeholder="Postal / PIN code" autocomplete="postal-code" maxlength="10">
                 </div>
                 <div class="form-group">
                     <label for="editCountry">Country</label>
@@ -801,6 +801,7 @@
     <div id="dashToast" class="toast" role="status"></div>
 
     <script src="js/config.js"></script>
+    <script src="js/customer-validation.js"></script>
     <script src="js/dashboard-new.js"></script>
 </body>
 </html>

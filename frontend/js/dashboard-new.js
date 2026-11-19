@@ -1,6 +1,6 @@
 ﻿/* Customer dashboard: profile, orders and automatically refreshed delivery tracking. */
 const API_BASE = (window.BG_CONFIG && window.BG_CONFIG.API_BASE) || '';
-const terminalStatuses = new Set(['delivered', 'cancelled', 'canceled', 'rto', 'returned']);
+const terminalStatuses = new Set(['delivered', 'cancelled', 'canceled', 'rto', 'returned', 'lost', 'damaged', 'destroyed']);
 const $ = id => document.getElementById(id);
 const normalizedStatus = value => String(value || '').trim().toLowerCase();
 const isHistory = order => terminalStatuses.has(normalizedStatus(order.status));
@@ -11,7 +11,8 @@ let selectedOrderId = '', refreshTimer, toastTimer, savingProfile = false, signe
 
 function dateLabel(value, includeTime = false) {
     if (!value || !Number.isFinite(new Date(value).getTime())) return 'Not available';
-    return new Date(value).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric',
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(value + 'T00:00:00') : new Date(value);
+    return date.toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric',
         ...(includeTime ? { hour: '2-digit', minute: '2-digit' } : {}) });
 }
 function feedback(id, message, error = false) {
@@ -135,10 +136,30 @@ function renderOrders(list, type) {
             </div>
             <div class="order-items">${items.length ? items.map(item => `<div class="order-item-line">${escapeHTML(item.name || 'Item')} &times; ${escapeHTML(item.quantity ?? 1)} &middot; ${money(item.price)} each</div>`).join('') : '<p>Item details unavailable.</p>'}</div>
             ${order.payment_method ? `<p class="order-date">Payment method: ${escapeHTML(order.payment_method === 'cod' ? 'Cash on delivery' : order.payment_method)}</p>` : ''}
+            <p class="order-date">Payment status: <strong>${paymentLabel(order)}</strong></p>
+            ${order.payment_id ? `<p class="order-date">Payment reference: ${escapeHTML(order.payment_id)}</p>` : ''}
+            <dl class="order-summary">
+                <div><dt>Subtotal</dt><dd>${savedAmount(order.subtotal)}</dd></div>
+                <div><dt>Shipping</dt><dd>${savedAmount(order.shipping)}</dd></div>
+                <div><dt>Discount${order.promo_code ? ' (' + escapeHTML(order.promo_code) + ')' : ''}</dt><dd>${savedAmount(order.discount)}</dd></div>
+                <div><dt>Total</dt><dd>${savedAmount(order.total)}</dd></div>
+            </dl>
+            <p class="order-date">Estimated delivery: ${dateLabel(order.estimated_delivery || order.expected_delivery)}</p>
+            ${order.delivery_date ? `<p class="order-date">Delivered on: ${dateLabel(order.delivery_date)}</p>` : ''}
             ${address ? `<div class="order-address"><strong>${escapeHTML(order.full_name || 'Delivery address')}</strong><br>${escapeHTML(address)}</div>` : ''}
             <button type="button" class="btn btn-secondary order-track" data-track-order="${escapeHTML(order.id)}">${type === 'current' ? 'Track order' : 'View delivery details'}</button>
         </article>`;
     }).join('');
+}
+function savedAmount(value) {
+    return value == null || value === '' || !Number.isFinite(Number(value)) ? 'Not available' : money(value);
+}
+function paymentLabel(order) {
+    if (order.payment_method === 'cod') return 'Cash on delivery';
+    if (order.payment_method === 'razorpay' && order.payment_verified_at && order.payment_id) {
+        return order.razorpay_key_id?.startsWith('rzp_test_') ? 'Test payment verified' : 'Payment verified';
+    }
+    return normalizedStatus(order.status) === 'payment pending' ? 'Awaiting payment confirmation' : 'Payment not verified';
 }
 function renderTrackingBar(order) {
     const status = normalizedStatus(order.status);
@@ -148,9 +169,24 @@ function renderTrackingBar(order) {
     const notices = {
         'payment pending': 'Payment is awaiting confirmation. Shipping starts after payment is confirmed.',
         cancelled: 'This order was cancelled.', canceled: 'This order was cancelled.',
-        returned: 'This order was returned.', rto: 'This shipment is returning to the sender or has been returned.'
+        returned: 'This order was returned.', rto: 'This shipment is returning to the sender or has been returned.',
+        lost: 'The courier reported this shipment lost. Please contact support.',
+        damaged: 'The courier reported this shipment damaged. Please contact support.',
+        destroyed: 'The courier reported this shipment destroyed. Please contact support.'
     };
-    const note = (Object.hasOwn(notices, status) ? notices[status] : '') || (index === undefined ? 'Delivery progress is not available for this status. Check the courier status below.' : '');
+    const courierStatus = normalizedStatus(order.tracking_status).replace(/_/g, ' ');
+    const exceptions = {
+        undelivered: 'The delivery attempt was unsuccessful. Please contact support if you need help.',
+        delayed: 'The courier has reported a delay.',
+        'pickup error': 'The courier could not complete pickup scheduling.',
+        'pickup exception': 'The courier has reported a pickup issue.',
+        'pickup rescheduled': 'The courier has rescheduled pickup.',
+        misrouted: 'The courier has reported a routing issue.',
+        'partial delivered': 'The courier reports a partial delivery. Please contact support.'
+    };
+    const note = (Object.hasOwn(notices, status) ? notices[status] : '') ||
+        (Object.hasOwn(exceptions, courierStatus) ? exceptions[courierStatus] : '') ||
+        (index === undefined ? 'Delivery progress is not available for this status. Check the courier status below.' : '');
     return `<div class="tracking-container">
         <div class="tracking-header"><strong>Order #${escapeHTML(order.id)}</strong><span class="order-status ${getStatusClass(order.status)}">${escapeHTML(order.status || 'Status unavailable')}</span></div>
         ${note ? `<p class="tracking-note">${note}</p>` : `<div class="tracking-steps" aria-label="Delivery progress: ${escapeHTML(stages[index])}">
@@ -162,7 +198,9 @@ function renderTrackingBar(order) {
             <span>Courier status: <strong>${escapeHTML(order.tracking_status || 'Awaiting courier update')}</strong></span>
             <span>Courier: <strong>${escapeHTML(order.courier_name || 'Not assigned yet')}</strong></span>
             <span>Tracking number (AWB): <strong>${escapeHTML(order.awb_number || 'Not assigned yet')}</strong></span>
-            <span>Estimated delivery: <strong>${dateLabel(order.estimated_delivery)}</strong></span>
+            <span>Estimated delivery: <strong>${dateLabel(order.estimated_delivery || order.expected_delivery)}</strong></span>
+            ${order.expected_delivery && order.estimated_delivery ? `<span>Store expected delivery: <strong>${dateLabel(order.expected_delivery)}</strong></span>` : ''}
+            <span>Delivered on: <strong>${dateLabel(order.delivery_date)}</strong></span>
             <span>Last courier update: <strong>${dateLabel(order.tracking_event_at, true)}</strong></span>
         </div>
     </div>`;
@@ -218,15 +256,9 @@ function handleModalBackdrop(event) { if (event.target === modal) closeModal(); 
 $('profileEditForm').onsubmit = async event => {
     event.preventDefault();
     if (savingProfile || !event.target.reportValidity()) return;
-    const data = Object.fromEntries(new FormData(event.target));
-    Object.keys(data).forEach(key => { data[key] = String(data[key]).trim(); });
-    if (!data.name) { feedback('profileSaveFeedback', 'Enter your full name.', true); $('editName').focus(); return; }
-    if (data.phone && (!/^[+\d\s()-]+$/.test(data.phone) || !/^\d{7,15}$/.test(data.phone.replace(/\D/g, '')))) {
-        feedback('profileSaveFeedback', 'Enter a valid phone number with 7 to 15 digits.', true); $('editPhone').focus(); return;
-    }
-    if (data.pincode && normalizedStatus(data.country || 'India') === 'india' && !/^[1-9]\d{5}$/.test(data.pincode)) {
-        feedback('profileSaveFeedback', 'Enter a valid 6-digit Indian PIN code.', true); $('editPincode').focus(); return;
-    }
+    let data;
+    try { data = window.CustomerValidation.profile(Object.fromEntries(new FormData(event.target))); }
+    catch (err) { feedback('profileSaveFeedback', err.message, true); return; }
     savingProfile = true;
     $('saveProfileBtn').disabled = true;
     $('saveProfileBtn').textContent = 'Saving...';
