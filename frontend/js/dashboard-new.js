@@ -90,6 +90,9 @@ function loadOrders() {
             if (!Array.isArray(data)) throw new Error('Invalid order response');
             orders = data;
             ordersLoaded = true;
+            $('activeOrderCount').textContent = orders.filter(order => !isHistory(order)).length;
+            $('deliveredOrderCount').textContent = orders.filter(order => normalizedStatus(order.status) === 'delivered').length;
+            $('totalOrderCount').textContent = orders.length;
             renderOrders(orders.filter(order => !isHistory(order)), 'current');
             renderOrders(orders.filter(isHistory), 'history');
             renderTracking();
@@ -115,14 +118,17 @@ function orderItems(order) {
 }
 function getStatusClass(status) {
     const value = normalizedStatus(status);
+    if (value === 'payment pending') return 'status-pending';
     if (value === 'delivered') return 'status-delivered';
     if (['shipped', 'out for delivery'].includes(value)) return 'status-shipped';
     return terminalStatuses.has(value) ? 'status-exception' : 'status-placed';
 }
 function renderOrders(list, type) {
     const container = $(type === 'current' ? 'currentOrdersList' : 'historyOrdersList');
+    // Preserve expanded details when the automatic refresh replaces the cards.
+    const expanded = new Set([...container.querySelectorAll('details[open]')].map(detail => detail.dataset.orderDetails));
     if (!list.length) {
-        container.innerHTML = '<p class="empty-state">No ' + (type === 'current' ? 'current' : 'past') + ' orders yet.' + (type === 'current' ? ' <a href="index.html">Continue shopping</a>' : '') + '</p>';
+        container.innerHTML = `<div class="empty-state"><i class="fas fa-box-open empty-icon" aria-hidden="true"></i><strong>No ${type === 'current' ? 'current' : 'past'} orders yet.</strong><p>${type === 'current' ? 'Your next little discovery is waiting.' : 'Completed deliveries and past orders will appear here.'}</p>${type === 'current' ? '<a class="btn btn-primary" href="index.html">Continue shopping</a>' : ''}</div>`;
         return;
     }
     container.innerHTML = list.map(order => {
@@ -134,9 +140,15 @@ function renderOrders(list, type) {
                 <div class="order-date">${dateLabel(order.created_at)}</div></div>
                 <div class="order-price">${money(order.total)}</div>
             </div>
-            <div class="order-items">${items.length ? items.map(item => `<div class="order-item-line">${escapeHTML(item.name || 'Item')} &times; ${escapeHTML(item.quantity ?? 1)} &middot; ${money(item.price)} each</div>`).join('') : '<p>Item details unavailable.</p>'}</div>
+            <div class="order-body">
+            <div class="order-items">${items.length ? items.map(item => `<div class="order-item-line"><span class="item-symbol" aria-hidden="true"><i class="fas fa-puzzle-piece"></i></span><div class="item-description"><strong>${escapeHTML(item.name || 'Item')}</strong><small>Qty ${escapeHTML(item.quantity ?? 1)} &middot; ${money(item.price)} each</small></div></div>`).join('') : '<p>Item details unavailable.</p>'}</div>
+            <div class="order-highlights">
+                <div><span>Payment status</span><strong>${paymentLabel(order)}</strong></div>
+                <div><span>${order.delivery_date ? 'Delivered on:' : 'Estimated delivery'}</span><strong>${dateLabel(order.delivery_date || order.estimated_delivery || order.expected_delivery)}</strong></div>
+            </div>
+            <details class="order-details" data-order-details="${escapeHTML(order.id)}" ${expanded.has(String(order.id)) ? 'open' : ''}>
+            <summary>Order details <span class="sr-only">for Order #${escapeHTML(order.id)}</span></summary>
             ${order.payment_method ? `<p class="order-date">Payment method: ${escapeHTML(order.payment_method === 'cod' ? 'Cash on delivery' : order.payment_method)}</p>` : ''}
-            <p class="order-date">Payment status: <strong>${paymentLabel(order)}</strong></p>
             ${order.payment_id ? `<p class="order-date">Payment reference: ${escapeHTML(order.payment_id)}</p>` : ''}
             <dl class="order-summary">
                 <div><dt>Subtotal</dt><dd>${savedAmount(order.subtotal)}</dd></div>
@@ -147,7 +159,9 @@ function renderOrders(list, type) {
             <p class="order-date">Estimated delivery: ${dateLabel(order.estimated_delivery || order.expected_delivery)}</p>
             ${order.delivery_date ? `<p class="order-date">Delivered on: ${dateLabel(order.delivery_date)}</p>` : ''}
             ${address ? `<div class="order-address"><strong>${escapeHTML(order.full_name || 'Delivery address')}</strong><br>${escapeHTML(address)}</div>` : ''}
-            <button type="button" class="btn btn-secondary order-track" data-track-order="${escapeHTML(order.id)}">${type === 'current' ? 'Track order' : 'View delivery details'}</button>
+            </details>
+            <div class="order-actions"><button type="button" class="btn btn-secondary order-track" data-track-order="${escapeHTML(order.id)}" aria-label="${type === 'current' ? 'Track order' : 'View delivery details for order'} #${escapeHTML(order.id)}"><i class="fas fa-truck-fast" aria-hidden="true"></i> ${type === 'current' ? 'Track order' : 'View delivery details'}</button></div>
+            </div>
         </article>`;
     }).join('');
 }
@@ -222,8 +236,6 @@ function switchOrderTab(tab) {
         const active = button.dataset.tab === tab;
         button.setAttribute('aria-pressed', String(active));
         button.classList.toggle('active', active);
-        button.style.color = active ? '#667eea' : '#636e72';
-        button.style.borderBottom = active ? '3px solid #667eea' : 'none';
     });
     $('currentOrdersSection').style.display = tab === 'current' ? 'block' : 'none';
     $('historyOrdersSection').style.display = tab === 'history' ? 'block' : 'none';

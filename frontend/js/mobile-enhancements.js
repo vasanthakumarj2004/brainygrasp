@@ -17,7 +17,6 @@ class MobileEnhancements {
         this.setupMobileOptimizations();
         this.setupResponsiveHandlers();
         this.setupMobileCart();
-        this.setupMobileQuickView();
         this.setupMobileScrollEffects();
     }
 
@@ -268,11 +267,8 @@ class MobileEnhancements {
                 img.setAttribute('loading', 'lazy');
             }
 
-            // Optimize for mobile
-            if (this.isMobile) {
-                img.style.maxWidth = '100%';
-                img.style.height = 'auto';
-            }
+            // Image dimensions belong to responsive CSS. Inline height:auto
+            // would override the product cards' contained image area.
         });
     }
 
@@ -478,22 +474,6 @@ class MobileEnhancements {
         }
         if (cartOverlay) {
             cartOverlay.classList.remove('active');
-        }
-    }
-
-    // Mobile Quick View Setup
-    setupMobileQuickView() {
-        const quickViewOverlay = document.querySelector('.quickview-overlay');
-
-        if (quickViewOverlay && this.isMobile) {
-            // Make quick view full screen on mobile
-            quickViewOverlay.style.padding = '0';
-
-            const quickViewContent = quickViewOverlay.querySelector('.quickview-content');
-            if (quickViewContent) {
-                quickViewContent.style.height = '100vh';
-                quickViewContent.style.borderRadius = '0';
-            }
         }
     }
 

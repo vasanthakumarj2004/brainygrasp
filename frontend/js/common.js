@@ -100,23 +100,32 @@ function initMobileMenu() {
 
   if (!menuBtn || !nav) return;
 
+  menuBtn.setAttribute('aria-controls', 'mainNav');
+  menuBtn.setAttribute('aria-expanded', 'false');
+
   function openMenu() {
 
     nav.classList.add('active');
+    menuBtn.setAttribute('aria-expanded', 'true');
 
     if (overlay) overlay.classList.add('active');
 
     document.body.style.overflow = 'hidden';
+
+    nav.querySelector('.nav-close-btn button')?.focus();
 
   }
 
   function closeMenu() {
 
     nav.classList.remove('active');
+    menuBtn.setAttribute('aria-expanded', 'false');
 
     if (overlay) overlay.classList.remove('active');
 
     document.body.style.overflow = '';
+
+    menuBtn.focus();
 
   }
 
@@ -124,9 +133,19 @@ function initMobileMenu() {
 
   if (overlay) overlay.addEventListener('click', closeMenu);
 
-  // Close menu on Escape key
+  // Keep keyboard focus inside the open drawer and release it on Escape.
   document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && nav.classList.contains('active')) closeMenu();
+    if (!nav.classList.contains('active')) return;
+    if (e.key === 'Escape') closeMenu();
+    if (e.key === 'Tab') {
+      const controls = [...nav.querySelectorAll('a[href], button:not(:disabled)')].filter(control => control.getClientRects().length);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (first && e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (last && !e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  });
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 768 && nav.classList.contains('active')) closeMenu();
   });
 
   // Inject a close (X) button at top of nav sidebar

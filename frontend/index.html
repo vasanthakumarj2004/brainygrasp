@@ -16,9 +16,10 @@
     rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="css/policy-mobile.css?v=4">
+  <link rel="stylesheet" href="css/storefront-home.css?v=1">
 </head>
 
-<body>
+<body class="storefront-home">
 
   <!-- Announcement Bar -->
   <div class="announcement-bar">
@@ -55,7 +56,7 @@
     <div class="container">
       <div class="header-inner">
         <!-- Mobile Menu Toggle -->
-        <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle mobile menu">
+        <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Open menu" aria-expanded="false" aria-controls="mainNav">
           <i class="fas fa-bars"></i>
         </button>
 
@@ -247,7 +248,7 @@
   </div>
 
   <!-- Hero Section -->
-  <section class="hero-section custom-banners">
+  <section class="hero-section custom-banners" aria-label="Featured games">
     <div class="hero-slider">
 
       <!-- Slide 0: BrainyGrasp Brand Intro -->
@@ -256,11 +257,11 @@
           <div class="brand-text-content">
             <h1>Where <span class="blue">Learning</span><br>Meets <span class="orange">Play!</span></h1>
             <p>Spark curiosity and joy with our hands-on educational toys, crafted for growing minds.</p>
-            <a href="shop-by-category.html" class="btn-brand">Explore Toys <i class="fas fa-arrow-right" style="margin-left:8px;"></i></a>
+            <a href="shop-by-category.html" class="btn-brand">Explore Toys</a>
           </div>
           <div class="brand-image-container">
             <img src="images/WhatsApp Image 2026-05-01 at 6.42.32 PM.jpeg"
-              alt="Brainy Grasp - Children learning and playing" class="brand-hero-img">
+              alt="Brainy Grasp - Children learning and playing" class="brand-hero-img" loading="eager" fetchpriority="high">
           </div>
         </div>
       </div>
@@ -292,7 +293,7 @@
   <section class="section-container" id="trendingSection">
     <div class="section-header">
       <h2 class="section-title">Our Products <span class="title-emoji">🔥</span></h2>
-      <a href="collections.html?collection=all" class="see-all">Shop All Products <i class="fas fa-arrow-right"></i></a>
+      <a href="collections.html?collection=all" class="see-all">Shop All Products</a>
     </div>
     <div class="products-grid" id="trendingGrid">
       <div class="product-skeleton"></div><div class="product-skeleton"></div>
@@ -315,7 +316,7 @@
   <section class="section-container" id="handpickedSection">
     <div class="section-header">
       <h2 class="section-title">Handpicked For You <span class="title-emoji">⭐</span></h2>
-      <a href="collections.html" class="see-all">View All Products <i class="fas fa-arrow-right"></i></a>
+      <a href="collections.html" class="see-all">View All Products</a>
     </div>
     <div class="tab-bar">
       <button class="tab-btn active" data-tab="all">All Products</button>

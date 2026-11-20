@@ -169,7 +169,7 @@ html, body {
 ───────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .filter-sidebar { display: none; }
-  .filter-sidebar.mobile-open { display: block; position: fixed; top: 0; left: 0; width: 85%; height: 100%; z-index: 999; overflow-y: auto; background: #fff; padding: 20px 16px; box-shadow: 4px 0 20px rgba(0,0,0,0.15); }
+  .filter-sidebar.active, .filter-sidebar.mobile-open { display: block; position: fixed; top: 0; left: 0; width: min(340px, 100%); height: 100dvh; z-index: 2000; overflow-y: auto; background: #fff; padding: 20px 16px; box-shadow: 4px 0 20px rgba(0,0,0,0.15); }
   .products-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
   .product-card { border-radius: 12px; }
   .product-card .product-image { height: 160px; }
@@ -316,4 +316,40 @@ html, body {
   h1 { font-size: 24px; }
   h2 { font-size: 20px; }
   h3 { font-size: 17px; }
+}
+
+/* Storefront navigation and product dialogs: match the classes used by common.js. */
+@media (max-width: 768px) {
+  .main-header { z-index: 1001; }
+  /* A backdrop-filter on the header would confine its fixed drawers to the header. */
+  .main-header.scrolled { background: white; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  #mobileMenuBtn { display: flex !important; flex: 0 0 44px; align-items: center; justify-content: center; flex-direction: column; gap: 4px; width: 44px; height: 44px; }
+  #mobileMenuBtn > span { display: block; width: 20px; height: 2px; background: currentColor; }
+  #mainNav { width: min(340px, 100vw); height: 100dvh; visibility: hidden; pointer-events: none; padding: 16px 24px calc(24px + env(safe-area-inset-bottom)); }
+  #mainNav.active { visibility: visible; pointer-events: auto; }
+  #mainNav:not(.active) * { visibility: hidden; }
+  #mainNav .nav-close-btn { display: block; width: 100%; }
+  #mainNav .nav-link { min-height: 44px; font-size: 1rem; white-space: normal; }
+  #mainNav .nav-item.has-mega.open .mega-menu { display: block; position: static; width: 100%; min-width: 0; transform: none; }
+  #mainNav .mega-grid, #mainNav .category-mega-flex, #mainNav .parents-mega-flex { display: flex; flex-direction: column; gap: 12px; }
+  .filter-sidebar.active { overscroll-behavior: contain; }
+  .quickview-modal { width: calc(100% - 24px); max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); border-radius: 16px; overscroll-behavior: contain; }
+  .quickview-modal .quickview-content { display: grid; grid-template-columns: minmax(0, 1fr); max-height: none; overflow: visible; }
+  .quickview-modal .quickview-image { height: auto; min-height: 0; padding: 24px 40px 12px; }
+  .quickview-modal .quickview-image img { width: 100%; height: auto; max-height: 240px; object-fit: contain; }
+  .quickview-modal .quickview-info { min-width: 0; padding: 16px 20px 24px; }
+  .quickview-modal .quickview-name { font-size: 1.5rem; line-height: 1.25; overflow-wrap: anywhere; }
+  .quickview-modal .quickview-description p, .quickview-modal .quickview-description ul { font-size: 1rem; }
+  .quickview-modal .product-price { flex-wrap: wrap; }
+  .quickview-modal .theme-grid { flex-wrap: wrap; gap: 8px; }
+  .quickview-modal .theme-btn { flex: 0 1 80px; min-width: 0; }
+  .quickview-modal .theme-btn img { max-width: 100%; }
+  .quickview-modal .quickview-actions-row { flex-direction: column; align-items: stretch; gap: 12px; margin: 18px 0; }
+  .quickview-modal .quickview-quantity { justify-content: space-between; margin: 0; }
+  .quickview-modal .qty-btn { width: 44px; height: 44px; flex: 0 0 44px; }
+  .quickview-modal .qty-input { width: 52px; height: 44px; margin: 0; padding: 6px; font-size: 16px; }
+  .quickview-modal .quickview-add-btn { width: 100%; min-height: 48px; margin: 0; font-size: 1rem; }
+  .quickview-modal .quickview-close { width: 44px; height: 44px; top: 8px; right: 8px; }
+  .product-specifications { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); overflow-wrap: anywhere; }
+  .cart-sidebar { height: 100vh; height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
 }

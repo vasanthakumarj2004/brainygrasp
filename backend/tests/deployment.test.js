@@ -6,6 +6,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
+const http = require('node:http');
+const { spawn } = require('node:child_process');
 const express = require('express');
 const { once } = require('node:events');
 const { mountFrontend } = require('../serveFrontend');
@@ -120,7 +122,8 @@ test('every portal chooses the current EC2/domain origin while retaining local d
       ['http://localhost:5500', 'http://localhost:3000'], ['http://localhost:5501', 'http://localhost:3000'],
       ['http://localhost:3000', 'http://localhost:3000'], ['http://localhost', 'http://localhost'],
       ['http://localhost:8080', 'http://localhost:8080'], ['http://127.0.0.1:52612', 'http://127.0.0.1:52612'],
-      ['http://192.168.1.2:5500', 'http://192.168.1.2:3000'], ['file:///site/index.html', 'http://localhost:3000'],
+      ['http://192.168.1.2:5500', 'http://192.168.1.2:5500'],
+      ['http://10.70.130.121:5500', 'http://10.70.130.121:5500'], ['file:///site/index.html', 'http://localhost:3000'],
     ]) {
       const window = { location: new URL(url) }; vm.runInNewContext(source, { window });
       assert.equal(window[key].API_BASE, expected, `${file}: ${url}`);
@@ -133,4 +136,66 @@ test('every portal chooses the current EC2/domain origin while retaining local d
 test('deployment configuration fails clearly for missing assets or invalid CORS origins', () => {
   assert.throws(() => mountFrontend(express(), { root: path.join(root, 'missing-deployment-fixture') }), /Frontend files are missing/);
   assert.throws(() => createCorsPolicy({ NODE_ENV: 'production', ALLOWED_ORIGINS: '*' }), /CORS configuration/);
+});
+
+test('frontend server proxies API methods, bodies and responses to the local backend', async t => {
+  const backend = http.createServer((req, res) => {
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({
+        method: req.method,
+        path: req.url,
+        body: Buffer.concat(chunks).toString(),
+        authorization: req.headers.authorization || null,
+      }));
+    });
+  });
+  backend.listen(0, '127.0.0.1');
+  await once(backend, 'listening');
+
+  const reservation = http.createServer();
+  reservation.listen(0, '127.0.0.1');
+  await once(reservation, 'listening');
+  const frontendPort = reservation.address().port;
+  await new Promise(resolve => reservation.close(resolve));
+
+  const frontend = spawn(process.execPath, [path.join(root, 'frontend-server.js')], {
+    cwd: root,
+    env: { ...process.env, FRONTEND_PORT: String(frontendPort), BACKEND_PORT: String(backend.address().port) },
+    stdio: 'ignore',
+  });
+  const frontendExit = once(frontend, 'exit');
+  t.after(async () => {
+    if (frontend.exitCode === null) frontend.kill();
+    await frontendExit;
+    await new Promise(resolve => backend.close(resolve));
+  });
+
+  let response;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    try {
+      response = await fetch(`http://127.0.0.1:${frontendPort}/api/products?source=mobile`);
+      break;
+    } catch {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  }
+  assert.ok(response, 'frontend server should accept catalog requests');
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    method: 'GET', path: '/api/products?source=mobile', body: '', authorization: null,
+  });
+
+  const body = JSON.stringify({ email: 'test@example.com' });
+  const otpResponse = await fetch(`http://127.0.0.1:${frontendPort}/api/auth/request-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
+    body,
+  });
+  assert.equal(otpResponse.status, 200);
+  assert.deepEqual(await otpResponse.json(), {
+    method: 'POST', path: '/api/auth/request-otp', body, authorization: 'Bearer test-token',
+  });
 });

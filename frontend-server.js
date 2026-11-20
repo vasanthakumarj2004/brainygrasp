@@ -80,17 +80,47 @@ function resolveFilePath(cleanPath) {
 const server = http.createServer((req, res) => {
   // CORS headers (development convenience)
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  const rawUrl    = req.url || '/';
+  const cleanPath = rawUrl.split('?')[0];
+
+  if (cleanPath === '/api' || cleanPath.startsWith('/api/')) {
+    const requestHeaders = { ...req.headers };
+    delete requestHeaders.connection;
+    const proxy = http.request({
+      hostname: '127.0.0.1',
+      port: process.env.BACKEND_PORT || 3000,
+      path: rawUrl,
+      method: req.method,
+      headers: requestHeaders,
+    }, apiResponse => {
+      const responseHeaders = { ...apiResponse.headers };
+      delete responseHeaders.connection;
+      responseHeaders['cache-control'] = 'no-store';
+      res.writeHead(apiResponse.statusCode || 502, responseHeaders);
+      apiResponse.pipe(res);
+    });
+
+    proxy.on('error', error => {
+      console.error('Backend API proxy failed:', error.message);
+      if (!res.headersSent) {
+        res.writeHead(502, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'Backend service unavailable' }));
+      } else {
+        res.destroy(error);
+      }
+    });
+    req.pipe(proxy);
+    return;
+  }
 
   if (req.method === 'OPTIONS') {
     res.writeHead(200);
     res.end();
     return;
   }
-
-  const rawUrl    = req.url || '/';
-  const cleanPath = rawUrl.split('?')[0];
 
   // Decode URL-encoded characters (e.g. %20 → space) so filenames with
   // spaces or special characters resolve correctly on disk.

@@ -6785,8 +6785,11 @@ input {
   }
 }
 
-/* Hide new mobile menu as requested */
-#mobileMenuBtn, #mobileNavSidebar { display: none !important; }
+/* The existing mainNav drawer is controlled by common.js. */
+#mobileNavSidebar { display: none !important; }
+@media (min-width: 769px) {
+  #mobileMenuBtn { display: none !important; }
+}
 .product-subtitle { color: #596579; font-size: 13px; line-height: 1.5; margin: 6px 0 12px; }
 .product-specifications { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 16px; font-size: 14px; margin: 18px 0; }
 .product-specifications dt { font-weight: 600; }

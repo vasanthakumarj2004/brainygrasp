@@ -11,20 +11,27 @@ function initHeroSlider() {
   const dots = document.querySelectorAll('.hero-dot');
   const prevBtn = document.querySelector('.hero-prev');
   const nextBtn = document.querySelector('.hero-next');
+  const slider = document.querySelector('.hero-slider');
+  // Keep the landing content still on phones and for reduced-motion users.
+  const manualSlides = window.matchMedia('(max-width: 900px), (prefers-reduced-motion: reduce)');
   let current = 0;
   let autoSlide;
  
   function goToSlide(index) {
     slides[current].classList.remove('active');
-    dots[current].classList.remove('active');
+    dots[current]?.classList.remove('active');
     current = index;
     if (current < 0) current = slides.length - 1;
     if (current >= slides.length) current = 0;
     slides[current].classList.add('active');
-    dots[current].classList.add('active');
+    dots[current]?.classList.add('active');
+    slides.forEach((slide, i) => slide.setAttribute('aria-hidden', String(i !== current)));
+    dots.forEach((dot, i) => dot.setAttribute('aria-pressed', String(i === current)));
   }
  
   function startAuto() {
+    clearInterval(autoSlide);
+    if (manualSlides.matches || document.hidden || slider?.contains(document.activeElement)) return;
     autoSlide = setInterval(() => goToSlide(current + 1), 5000);
   }
  
@@ -37,9 +44,19 @@ function initHeroSlider() {
     dot.addEventListener('click', () => { goToSlide(i); resetAuto(); });
   });
  
-  prevBtn.addEventListener('click', () => { goToSlide(current - 1); resetAuto(); });
-  nextBtn.addEventListener('click', () => { goToSlide(current + 1); resetAuto(); });
+  prevBtn?.addEventListener('click', () => { goToSlide(current - 1); resetAuto(); });
+  nextBtn?.addEventListener('click', () => { goToSlide(current + 1); resetAuto(); });
+
+  slider?.addEventListener('focusin', () => clearInterval(autoSlide));
+  slider?.addEventListener('focusout', event => {
+    if (!slider.contains(event.relatedTarget)) setTimeout(startAuto, 0);
+  });
+  manualSlides.addEventListener('change', resetAuto);
+  document.addEventListener('visibilitychange', resetAuto);
+  window.addEventListener('pagehide', () => clearInterval(autoSlide));
+  window.addEventListener('pageshow', resetAuto);
  
+  goToSlide(0);
   startAuto();
 }
  

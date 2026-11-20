@@ -1,0 +1,98 @@
+/* Homepage refinements. Shared drawers and product dialogs live in policy-mobile.css. */
+.storefront-home :is(a, button, input):focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }
+.storefront-home .hero-dot { width: 44px; height: 44px; min-width: 44px; min-height: 44px; background: transparent; border: 0; display: grid; place-items: center; }
+.storefront-home .hero-dot::after { content: ''; width: 9px; height: 9px; border-radius: 20px; background: #64748b; }
+.storefront-home .hero-dot.active::after { width: 24px; background: #164c77; }
+.storefront-home .hero-dots { gap: 0; }
+@media (max-width: 900px) {
+  /* Let each slide grow with translated text and browser font enlargement. */
+  .storefront-home .hero-slider { height: auto !important; }
+  .storefront-home .hero-slide { height: auto !important; min-height: 0 !important; }
+  .storefront-home .hero-slide .banner-container,
+  .storefront-home .banner-brand-inner { height: auto !important; min-height: 0 !important; padding: 28px 24px 68px !important; gap: 20px; flex-direction: column; }
+  .storefront-home .banner-content,
+  .storefront-home .brand-text-content { flex: none; width: 100%; max-width: 540px; text-align: center; padding: 0; }
+  .storefront-home .hero-slide h1 { font-size: clamp(1.75rem, 6.5vw, 2.5rem) !important; line-height: 1.15 !important; margin-bottom: 12px !important; }
+  .storefront-home .hero-slide p { font-size: 1rem !important; line-height: 1.5 !important; margin-bottom: 12px !important; }
+  .storefront-home .banner-content .btn,
+  .storefront-home .btn-brand { width: auto; max-width: 100%; min-height: 48px; padding: 12px 26px !important; font-size: 1rem !important; margin: 6px 0 0; box-shadow: none; }
+  .storefront-home .brand-image-container,
+  .storefront-home .banner-images { flex: none; width: 100%; height: clamp(160px, 45vw, 250px); margin: 0; display: flex; justify-content: center; align-items: center; overflow: visible; }
+  .storefront-home .brand-image-container .brand-hero-img { width: 100%; max-width: 360px; height: 100%; max-height: 100%; object-fit: contain; animation: none; }
+  .storefront-home .banner-images .prod-img.img-main { position: static; width: 100% !important; max-width: 280px !important; height: 100% !important; max-height: 100%; aspect-ratio: auto !important; object-fit: contain !important; transform: none !important; border-radius: 12px !important; box-shadow: none !important; }
+  .storefront-home .hero-arrow { top: auto; bottom: 12px; transform: none; width: 44px; height: 44px; }
+  .storefront-home .hero-prev { left: 20px; }
+  .storefront-home .hero-next { right: 20px; }
+  .storefront-home .hero-dots { bottom: 12px; }
+  .storefront-home .brand-text-content h1,
+  .storefront-home .brand-text-content h1 span,
+  .storefront-home .brand-text-content p,
+  .storefront-home .brand-text-content .btn-brand,
+  .storefront-home .brand-image-container { animation: none; opacity: 1; transform: none; }
+}
+@media (max-width: 768px) {
+  body.storefront-home { padding-top: 0; font-size: 16px; }
+  .storefront-home .top-bar { display: none; }
+  .storefront-home .announcement-bar { padding: 8px 12px; font-size: .75rem; }
+  .storefront-home .announcement-slider { height: auto; min-height: 36px; display: grid; place-items: center; }
+  .storefront-home .announcement-slide { position: relative; grid-area: 1 / 1; font-size: .75rem; line-height: 1.5; white-space: normal; }
+  .storefront-home .main-header { position: sticky; top: 0; height: auto; z-index: 1001; }
+  .storefront-home .main-header > .container { padding: 0 12px; }
+  .storefront-home .header-inner { height: 68px; padding: 0; gap: 8px; flex-wrap: nowrap; }
+  .storefront-home .logo { flex: 1 1 auto; min-width: 0; }
+  .storefront-home .logo img.brand-logo { width: auto !important; height: 34px !important; max-width: 100%; object-fit: contain; }
+  .storefront-home .header-actions { gap: 0 !important; flex: 0 0 auto; }
+  .storefront-home .header-actions .header-action-btn { width: 44px !important; height: 44px !important; min-width: 44px; padding: 0; font-size: 18px !important; }
+  /* WhatsApp remains available in the floating support link and footer. */
+  .storefront-home .header-actions .whatsapp-btn { display: none; }
+  .storefront-home .section-container { padding: 32px 16px; }
+  .storefront-home .section { padding: 32px 4px !important; }
+  .storefront-home .section-header { margin-bottom: 20px; gap: 6px; }
+  .storefront-home .section-title { font-size: 1.625rem; line-height: 1.25; }
+  .storefront-home .see-all { font-size: .875rem; min-height: 44px; }
+  .storefront-home .products-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .storefront-home .product-card { min-width: 0; border-radius: 14px; box-shadow: 0 2px 10px #14314d08; display: flex; flex-direction: column; }
+  .storefront-home .product-card .product-image { height: auto; aspect-ratio: 1; padding: 12px; background: #f4f8fb; }
+  .storefront-home .product-image img { width: 100%; height: 100%; object-fit: contain; }
+  .storefront-home .product-card .product-info { padding: 12px; min-width: 0; }
+  .storefront-home .product-age-pill { margin-top: 0; padding: 4px 8px; font-size: .75rem; }
+  .storefront-home .product-card .product-name { font-size: 1rem; line-height: 1.35; min-height: 0; height: auto; display: block; overflow: visible; margin-bottom: 8px; overflow-wrap: anywhere; }
+  .storefront-home .product-subtitle { font-size: .875rem; margin: 0 0 12px; }
+  .storefront-home .product-price-row { flex-wrap: wrap; gap: 4px 8px; }
+  .storefront-home .price-current { font-size: 1.125rem; color: #123d60; }
+  .storefront-home .price-original { font-size: .875rem; color: #657487; }
+  .storefront-home .price-save { font-size: .75rem; color: #23764f; }
+  .storefront-home .promo-box { font-size: .75rem; line-height: 1.5; padding: 8px; overflow-wrap: anywhere; }
+  .storefront-home .promo-box:empty { display: none; }
+  .storefront-home .product-card .add-to-cart-btn { min-height: 46px; padding: 10px 6px; font-size: .875rem; white-space: normal; margin-top: auto; }
+  .storefront-home .product-share .share-btn { width: 44px; height: 44px; }
+  .storefront-home .tab-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+  .storefront-home .tab-bar .tab-btn { flex: 1; min-height: 44px; font-size: .875rem; padding: 10px 12px; white-space: normal; }
+  .storefront-home .promo-strip { padding: 28px 20px; }
+  .storefront-home .promo-strip-content { gap: 18px; }
+  .storefront-home .promo-strip h2 { font-size: 1.5rem; }
+  .storefront-home .promo-strip p { font-size: 1rem; }
+  .storefront-home .promo-btn { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; }
+  .storefront-home .about-inner { gap: 24px; }
+  .storefront-home .about-content .section-title { font-size: 1.625rem; }
+  .storefront-home .about-text, .storefront-home .about-features li { font-size: 1rem; }
+  .storefront-home .about-image-wrapper { width: 100%; max-width: 400px; margin-bottom: 40px; }
+  .storefront-home .faq-question { font-size: 1rem; text-align: left; gap: 12px; }
+  .storefront-home .faq-question i { flex-shrink: 0; }
+  .storefront-home .faq-answer p { font-size: .9375rem; }
+  .storefront-home .footer-links a, .storefront-home .footer-col a { font-size: .875rem; }
+  .storefront-home .whatsapp-float { bottom: calc(18px + env(safe-area-inset-bottom)) !important; }
+  .storefront-home .back-to-top { right: 18px; bottom: calc(80px + env(safe-area-inset-bottom)); width: 44px; height: 44px; }
+}
+@media (max-width: 360px) {
+  .storefront-home .products-grid { grid-template-columns: minmax(0, 1fr); }
+  .storefront-home .product-card .product-image { max-height: 260px; }
+  .storefront-home .header-inner { gap: 4px; }
+  .storefront-home .logo img.brand-logo { height: 28px !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .storefront-home *, .storefront-home *::before, .storefront-home *::after { animation: none !important; transition: none !important; }
+  .storefront-home .brand-text-content h1, .storefront-home .brand-text-content h1 span,
+  .storefront-home .brand-text-content p, .storefront-home .btn-brand,
+  .storefront-home .brand-image-container { opacity: 1; transform: none; }
+}
