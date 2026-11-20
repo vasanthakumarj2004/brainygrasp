@@ -76,10 +76,108 @@ test('authorization remains pending until capture', async () => {
 
 test('concurrent callbacks and webhook confirm once with one commission and shipment', async () => {
   const f = fixture(); await f.service.create(1, { ...request(), affiliate_ref: 'TEST' }); f.setPayment({ amount: 90000 });
+  // Edits made after payment starts must survive confirmation of its snapshot.
+  f.state.cart = [{ id: 1, quantity: 3 }, { id: 2, quantity: 1 }];
   await Promise.all([f.service.verify(1, f.callback()), f.service.webhook(...f.webhook()), f.service.verify(1, f.callback())]);
   assert.equal(f.state.orders[0].status, 'Paid'); assert.equal(f.state.cartWrites, 1);
   assert.equal(f.state.commissions, 1); assert.equal(f.state.walletCredits, 1); assert.deepEqual(f.effects, [1]);
   assert.deepEqual(f.state.cart, [{ id: 1, quantity: 1 }, { id: 2, quantity: 1 }]);
+});
+
+test('online creation uses database quantities and catalog prices, ignoring request cart and amounts', async () => {
+  const f = fixture();
+  f.state.cart = [{ id: 1, quantity: 3, price: 1 }];
+  const order = await f.service.create(1, { ...request(), items: [{ id: 2, quantity: 1, price: 1 }], amount: 1, total: 1 });
+  assert.equal(order.items[0].id, 1); assert.equal(order.items[0].quantity, 3);
+  assert.equal(order.total, 1350); assert.equal(order.amount, 135000);
+});
+
+test('changed quantity cancels the old order and a fresh request creates a new gateway order', async () => {
+  const f = fixture(), input = request();
+  const old = await f.service.create(1, input);
+  f.state.cart[0].quantity = 3;
+  const stale = await f.service.status(1, old.id);
+  assert.equal(stale.stale, true); assert.equal(stale.resumable, false);
+  assert.equal(stale.orderId, undefined); assert.equal(stale.amount, undefined);
+  assert.equal(stale.current_cart.total, 1350);
+  assert.equal(f.state.orders[0].status, 'Cancelled');
+  const fresh = await f.service.create(1, request());
+  assert.notEqual(fresh.id, old.id); assert.notEqual(fresh.orderId, old.orderId);
+  assert.equal(fresh.amount, 135000); assert.equal(f.calls.create, 2);
+  assert.equal(f.state.orders[0].amount_paise, old.amount);
+  // A lost response or another tab cannot revive the cancelled request key.
+  assert.equal((await f.service.create(1, input)).stale, true);
+});
+
+test('unchanged cart, including reordered lines, resumes the same gateway order', async () => {
+  const f = fixture(); f.state.cart.push({ id: 2, quantity: 1 });
+  const old = await f.service.create(1, request());
+  f.state.cart.reverse();
+  const resumed = await f.service.status(1, old.id);
+  assert.equal(resumed.resumable, true); assert.equal(resumed.orderId, old.orderId);
+  assert.equal(f.calls.create, 1); assert.equal(f.state.orders[0].status, 'Payment Pending');
+});
+
+test('different products with the same total still invalidate a pending order', async () => {
+  const f = fixture(); const old = await f.service.create(1, request());
+  f.state.cart = [{ id: 2, quantity: 2 }];
+  const stale = await f.service.status(1, old.id);
+  assert.equal(stale.current_cart.total, old.total); assert.equal(stale.stale, true);
+});
+
+test('price changes and removed items invalidate the saved quote', async () => {
+  for (const change of [f => { f.state.products[0].price = 700; }, f => { f.state.cart[0].quantity = 1; }, f => { f.state.cart = []; }]) {
+    const f = fixture(); const old = await f.service.create(1, request()); change(f);
+    const stale = await f.service.status(1, old.id);
+    assert.equal(stale.stale, true); assert.equal(f.state.orders[0].status, 'Cancelled');
+    assert.equal(f.state.cartWrites, 0); assert.equal(f.effects.length, 0);
+  }
+});
+
+test('stale lost-create retries are invalidated even before a gateway order was initialized', async () => {
+  const f = fixture(), input = request(); f.calls.failCreate = true;
+  await assert.rejects(f.service.create(1, input));
+  f.calls.failCreate = false; f.state.cart[0].quantity = 3;
+  const stale = await f.service.create(1, input);
+  assert.equal(stale.stale, true); assert.equal(f.state.orders[0].razorpay_order_id, undefined);
+  assert.equal(f.calls.create, 1);
+});
+
+test('lost remote response is recovered and checked before cancelling a changed basket', async () => {
+  const f = fixture(), input = request(); f.calls.loseCreateResponse = true;
+  await assert.rejects(f.service.create(1, input));
+  f.calls.loseCreateResponse = false; f.state.cart[0].quantity = 3;
+  const stale = await f.service.create(1, input);
+  assert.equal(stale.stale, true); assert.equal(f.state.orders[0].razorpay_order_id, 'order_fixture1');
+  assert.equal(f.calls.create, 1);
+});
+
+test('in-flight payments on changed carts are checked without enabling another payment', async () => {
+  for (const status of ['created', 'authorized']) {
+    const f = fixture(); const old = await f.service.create(1, request());
+    f.state.cart[0].quantity = 3;
+    f.setPayments([{ id: 'pay_fixture', order_id: old.orderId, status }]);
+    const result = await f.service.status(1, old.id);
+    assert.equal(result.pending, true); assert.equal(result.resumable, false);
+    assert.equal(f.state.orders[0].status, 'Payment Pending'); assert.equal(f.calls.create, 1);
+  }
+});
+
+test('late capture for a cancelled order cannot fulfill it or its replacement', async () => {
+  const f = fixture(); const old = await f.service.create(1, request());
+  f.state.cart[0].quantity = 3; await f.service.status(1, old.id);
+  await f.service.create(1, request()); f.setPayment({ amount: old.amount });
+  await assert.rejects(f.service.verify(1, f.callback(old.id)), { status: 409 });
+  await assert.rejects(f.service.webhook(...f.webhook()), { status: 409 });
+  assert.deepEqual(f.state.orders.map(o => o.status), ['Cancelled', 'Payment Pending']);
+  assert.equal(f.state.cartWrites, 0); assert.equal(f.state.jobs.length, 0); assert.equal(f.effects.length, 0);
+});
+
+test('gateway failure leaves a changed order pending and cannot authorize stale checkout', async () => {
+  const f = fixture(); const old = await f.service.create(1, request());
+  f.state.cart[0].quantity = 3; f.calls.failFetch = true;
+  await assert.rejects(f.service.status(1, old.id));
+  assert.equal(f.state.orders[0].status, 'Payment Pending'); assert.equal(f.calls.create, 1);
 });
 
 test('confirmation rolls back on DB failure and retries safely', async () => {

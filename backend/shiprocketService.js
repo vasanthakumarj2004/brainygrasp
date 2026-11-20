@@ -25,7 +25,12 @@ function createShiprocketClient({ env = process.env, fetchImpl = globalThis.fetc
       if (typeof data.token !== 'string' || !data.token) throw new ShippingError('authentication', 'Shiprocket did not return an authentication token.');
       token = data.token; expires = Date.now() + 10 * 86400000 - 1800000;
       return token;
-    })().finally(() => { loginPromise = null; });
+    })().catch(err => {
+      // Login cannot create a shipment, assign an AWB or request pickup. Even
+      // after a 401 refresh, a failed login is safe to retry at the same stage.
+      if (err instanceof ShippingError) err.ambiguous = false;
+      throw err;
+    }).finally(() => { loginPromise = null; });
     return loginPromise;
   }
   async function call(path, body, retry = true) {

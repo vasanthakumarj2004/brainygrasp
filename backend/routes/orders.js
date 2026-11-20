@@ -99,9 +99,15 @@ router.get('/api/orders', authenticateToken, async (req, res) => {
     const result = await pool.query(`
       SELECT o.*,
              a.full_name, a.line1, a.line2,
-             a.city,      a.state, a.pincode
+             a.city,      a.state, a.pincode,
+             CASE WHEN sj.order_id IS NULL THEN NULL ELSE jsonb_build_object(
+               'state', sj.state, 'phase', sj.phase,
+               'pickup_requested', sj.details->'pickupConfirmed' = 'true'::jsonb,
+               'pickup_scheduled_date', sj.details->>'pickupScheduledDate'
+             ) END AS shipment_progress
       FROM orders o
       LEFT JOIN addresses a ON o.address_id = a.id
+      LEFT JOIN shipping_jobs sj ON sj.order_id = o.id
       WHERE o.user_id = $1
       ORDER BY o.created_at DESC
     `, [req.user.id]);

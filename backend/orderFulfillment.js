@@ -4,6 +4,8 @@ const pool = require('./db');
 const { deleteCache, CACHE_KEYS } = require('./redisClient');
 const { createDeliveryTracking } = require('./deliveryTracking');
 const { processShipment } = require('./shippingJobs');
+const { createTrackingReconciliation } = require('./trackingReconciliation');
+const shippingClient = require('./shiprocketService');
 
 async function invalidateOrderCache(userId) {
   await Promise.all([
@@ -12,6 +14,8 @@ async function invalidateOrderCache(userId) {
   ]);
 }
 const tracking = createDeliveryTracking({ pool, invalidate: invalidateOrderCache });
+const reconcileTracking = createTrackingReconciliation({ pool, client: shippingClient, tracking,
+  onError: () => console.error('Courier tracking refresh will retry.') });
 let ticking = false;
 async function tick() {
   if (ticking) return;
@@ -26,6 +30,7 @@ async function tick() {
       for (const job of jobs.rows) {
         try { await processShipment(job.order_id); } catch (err) { if (err.code !== 'busy') console.error('Shipment processing paused:', err.code || 'database'); }
       }
+      await reconcileTracking();
     }
   } catch { console.error('Shipping worker could not read its queue; it will retry.'); }
   finally { ticking = false; }

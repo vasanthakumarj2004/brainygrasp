@@ -1,131 +1,154 @@
-# Frontend and API deployment on EC2
+# Docker frontend, API and host Nginx deployment
 
-The application now serves the storefront, admin, affiliate portal and API from
-one Node process on port 3000. You do not need to run `frontend-server.js` or expose
-5500/5501 in production. The browser uses its current origin for `/api` requests,
-whether opened on the EC2 IP, `brainygrasp.com` or `www.brainygrasp.com`.
+The default deployment uses separate frontend and backend images. Run commands
+from the repository root (the directory containing docker-compose.yml).
 
-## Deploy the complete project
+| Service | Host binding | Purpose |
+| --- | --- | --- |
+| Frontend | 127.0.0.1:3000 -> container 8080 | Static storefront, admin and affiliate pages |
+| Backend | 127.0.0.1:5000 -> container 5000 | API, payment webhooks and shipping worker |
+| PostgreSQL | No published port | Persistent database on the Compose network |
+| Redis | No published port | Persistent cache on the Compose network |
 
-Upload/checkout the project including `backend/`, `frontend/` and `admin/`.
-Uploading only `backend/` cannot serve the frontend. Keep the real environment
-file outside Git and preserve the existing database and credentials.
+Host Nginx routes / to port 3000 and /api or /api/... directly to port 5000.
+Browsers use the public domain for API calls. Keep ports 3000/5000 private; only
+host Nginx needs them. TLS certificates and Certbot stay on the host.
 
-Set these values in the EC2 backend runtime or its ignored `backend/.env`:
+## Configure and start
 
-```dotenv
-NODE_ENV=production
-PORT=3000
-SERVE_FRONTEND=true
-FRONTEND_URL=https://brainygrasp.com
-ALLOWED_ORIGINS=https://brainygrasp.com,https://www.brainygrasp.com
-```
-
-Retain the correct database, Redis, authentication and existing service settings.
-This frontend fix does not require switching payment keys. The application must
-connect to its database and Redis during startup before it can serve requests.
-
-For a direct Node deployment, run from the project directory:
+For a new deployment:
 
 ```sh
-cd backend
-npm ci --omit=dev
-npm start
+cp .env.example .env
+chmod 600 .env
+# Edit .env with your actual database, authentication, email and service values.
+docker compose config --quiet
+docker compose up -d
+docker compose ps
 ```
 
-Run that command under the process supervisor already used on EC2 so it survives
-SSH disconnects and reboots. Do not start a second copy on an occupied port.
+The images are named brainygrasp-frontend:local and brainygrasp-backend:local.
+Compose's pull_policy: build builds them from this checkout on up, reusing cached
+layers. PostgreSQL and Redis use their official images. To deploy code updates,
+update the checkout and run docker compose up -d again.
 
-For the existing Docker Compose deployment, run from the project directory:
+The ignored root .env supplies both Compose variables and backend runtime
+settings. Real environment files are excluded from image builds. Backend-only
+settings (including all Razorpay, Shiprocket and SMTP values) never enter the
+frontend container. Do not use the example credentials in production.
+
+Compose forces PORT=5000 and SERVE_FRONTEND=false. It also forces connections
+to its db and redis services, using separate password fields rather than URLs.
+This default stack does not use RDS, Neon, Upstash or an existing external database.
+If you already have production data elsewhere, retain that deployment until you
+have deliberately configured the connections or migrated the data.
+
+For an existing Compose database, retain the project name, postgres_data volume,
+DB_USER, DB_NAME and DB_PASSWORD. Changing POSTGRES_PASSWORD does not change an
+existing database user's password. Do not run docker compose down -v on real data.
+The former pgAdmin service is not part of this production stack.
+
+docker-compose.prod.yml is an equivalent standalone entry point:
 
 ```sh
-docker compose --env-file backend/.env -f docker-compose.prod.yml config --quiet
-docker compose --env-file backend/.env -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-The Docker build context is now the project root. For a standalone image build:
+To explicitly use another environment file, supply it to both Compose and the
+backend (the path below is an example, not a file provided by this repository):
 
 ```sh
-docker build -f backend/Dockerfile -t brainygrasp .
+APP_ENV_FILE=/secure/brainygrasp.env docker compose --env-file /secure/brainygrasp.env up -d
 ```
 
-The image includes both frontend directories and excludes `.env`, Git history and
-local node_modules. The Compose deployment uses its own PostgreSQL/Redis services;
-if your EC2 deployment already uses other database services, retain that existing
-deployment arrangement. Do not replace an existing database, change the Compose
-project name or remove volumes as part of this frontend fix.
+Keep SHIPROCKET_ENABLED=false until the existing shipping setup is ready.
+Confirmation still queues automatic shipment creation when enabled. This packaging
+change does not alter payment verification or shipment logic.
 
-## Existing HTTPS proxy
+## Install the host Nginx configuration
 
-Forward **all paths** to the application on port 3000, not only `/api`. For a host
-Nginx proxy, the location block inside the existing TLS server is:
+Use [deploy/nginx/brainygrasp.conf](deploy/nginx/brainygrasp.conf) on the EC2 host.
+The separate [deploy/nginx/frontend.conf](deploy/nginx/frontend.conf) is packaged
+inside the frontend image; it is not the host reverse proxy configuration.
 
-```nginx
-location / {
-    proxy_pass http://127.0.0.1:3000;
-    proxy_http_version 1.1;
-    proxy_set_header Host $http_host;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-For $remote_addr;
-}
-```
-
-This example assumes Nginx is the single trusted proxy on the same EC2 machine.
-Keep your existing domain certificate configuration. If using an ALB instead,
-forward the site's requests to the app target and preserve the original host and
-HTTPS scheme. Restrict direct backend access to the proxy where appropriate.
-The application currently trusts one proxy hop; a different proxy chain needs
-its trust setting reviewed. No proxy, certificate or AWS change was applied here.
-
-## Verify after restart
-
-Deploy the cart frontend and backend together. Startup creates the additive
-`cart_mutations` table before serving requests; the database user needs permission
-to create this table. Cart updates now send quantity changes with durable request
-IDs instead of replacing a whole basket. Keep the mutation receipts: they prevent
-an offline browser from replaying an already-applied change after checkout.
-An old open browser tab using the previous cart API must refresh after deployment.
-
-Production Compose forwards all `SHIPROCKET_*` settings from the selected
-environment file, including `SHIPROCKET_PACKAGES`. Shipping defaults to disabled.
-Set the credentials, channel, pickup location/PIN, order prefix, packages and
-webhook secret before enabling it; existing startup validation rejects incomplete
-configuration. Razorpay test payments remain ineligible for real prepaid shipments.
-
-From EC2, these checks should pass before testing the public domain:
+For a new Ubuntu/Debian site, after installing Nginx:
 
 ```sh
-curl -I http://127.0.0.1:3000/
-curl -I http://127.0.0.1:3000/js/config.js
-curl http://127.0.0.1:3000/api/health
+curl --fail http://127.0.0.1:3000/health
+curl --fail http://127.0.0.1:5000/api/health
+sudo install -m 0644 deploy/nginx/brainygrasp.conf /etc/nginx/sites-available/brainygrasp
+sudo ln -s /etc/nginx/sites-available/brainygrasp /etc/nginx/sites-enabled/brainygrasp
+sudo nginx -t
+sudo systemctl reload nginx
 ```
 
-Expected: HTML at `/`, JavaScript at `/js/config.js`, and healthy JSON at
-`/api/health`. Then open `/`, `/admin/` and `/affiliate/` through the public domain.
-Check DevTools Network: API requests should use the same public origin, with no
-Render address, localhost address, unexpected port 3000, or mixed HTTP/HTTPS.
+Only reload after nginx -t succeeds. If this site is already enabled, edit the
+existing file rather than creating another server block with the same domain.
+The host configuration preserves /api prefixes, request bodies, query strings,
+authorization headers and webhook signatures. It disables upstream retries and
+proxy caching so payment requests are not automatically replayed.
 
-If the local checks pass but the domain does not, inspect the existing DNS,
-security group and proxy routing. A CORS change cannot fix a closed port or a
-domain routed to a different server. Do not use a wildcard CORS allowlist as a fix.
+After both names resolve to the host, with ports 80/443 reachable and Certbot's
+Nginx plugin installed:
 
-Local development still supports the separate frontend on localhost:5500/5501
-calling localhost:3000. API-only deployments can set `SERVE_FRONTEND=false`.
+```sh
+sudo certbot --nginx --redirect -d brainygrasp.com -d www.brainygrasp.com
+sudo nginx -t
+sudo certbot renew --dry-run
+```
 
-## Verification performed
+Certbot adds HTTPS and the HTTP redirect. Do not overwrite the certificate-bearing
+configuration with the HTTP bootstrap afterward. For an existing HTTPS site,
+keep its TLS directives and apply the proxy headers and three location blocks
+from brainygrasp.conf inside its HTTPS server block. Both the exact /api location
+and the /api/ prefix go to port 5000, with no trailing slash on proxy_pass.
 
-The regression suite tests page/asset serving, portal redirects, same-origin
-requests, explicit allowed origins, rejected unrelated origins, local development,
-proxy HTTPS handling and unchanged raw webhook bodies. The production Docker image
-is also tested with separate disposable PostgreSQL and Redis containers, without
-using the local application's data or credentials.
+The earlier [EC2 User data script](deploy/ec2-user-data.sh) targets the legacy
+combined Node app on port 3000. It does not install Docker or configure the new
+separate API route. If that script already configured certificates, preserve its
+ACME challenge location and TLS directives, then apply the new API locations and
+shared proxy settings to that existing site. Use the manual instructions above
+for a fresh split-container deployment.
 
-Result on 18 November 2026: 85 automated tests passed. The built Linux image
-started successfully, served all 34 HTML pages and 53 referenced local assets
-without errors, and passed API health, authentication, catalog and CORS checks.
-The packaged portal scripts resolved their API URLs to the same test origin.
-These are local production-image checks; the EC2 host itself was not modified
-or verified in this task.
+## Verify the deployment
 
-References: [Express static files](https://expressjs.com/en/starter/static-files/),
-[Express proxy configuration](https://expressjs.com/en/guide/behind-proxies/).
+```sh
+docker compose ps
+docker compose logs --tail=100 backend frontend
+curl -I https://brainygrasp.com/
+curl -I https://brainygrasp.com/admin/
+curl -I https://brainygrasp.com/affiliate/
+curl --fail https://brainygrasp.com/api/health
+```
+
+The frontend health check verifies its static server. The API health check verifies
+database access and reports Redis status. The backend starts after PostgreSQL and
+Redis are healthy and initializes its schema before listening. Startup includes
+the additive tracking reconciliation migration; the database user needs schema
+creation/alteration privileges.
+
+The frontend retains /frontend/... legacy paths, extensionless pages, HTML
+no-store responses and asset revalidation. Unknown API requests never return a
+storefront page. Direct calls to port 3000/api intentionally return 404: the host
+reverse proxy is responsible for directing public API traffic to port 5000.
+
+Open the domain in a browser and verify that API requests use the same HTTPS
+origin. No browser request should target container names, localhost or port 5000.
+Check Razorpay and Shiprocket webhook URLs continue to use the public /api paths.
+
+Local npm development is unchanged: backend/server.js still defaults to the
+combined app on port 3000 outside Docker, and frontend-server.js supports port
+5500 for development. This document describes the separate production containers.
+
+## Local verification
+
+On 20 November 2026, both images built and started against disposable PostgreSQL
+and Redis containers. Both Nginx configurations passed nginx -t. The proxy served
+all 34 HTML pages and 56 referenced local assets; portal redirects, legacy URLs,
+API routing and database/cache health checks passed. All 175 automated tests passed,
+including the optional Docker integration checks. The temporary stack was removed;
+the two built images remain available locally. No live service credentials were
+used and no EC2 configuration was changed.
+
+References: [Docker Compose build policy](https://docs.docker.com/reference/compose-file/services/#pull_policy),
+[Nginx proxy_pass URI behavior](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_pass).

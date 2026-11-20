@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { CheckoutError, checkoutIdentity, positiveId, quote, ownedAddress, affiliate, confirmEffects } = require('./checkoutService');
+const { CheckoutError, checkoutIdentity, positiveId, quoteCart, matchesQuote, ownedAddress, affiliate, confirmEffects } = require('./checkoutService');
 const { prepareShipping } = require('./shippingCheckout');
 
 function validSignature(payload, signature, secret) {
@@ -24,7 +24,8 @@ function createPaymentService({ pool, gateway, env, afterConfirmation, invalidat
     return {
       id: order.id, orderId: order.razorpay_order_id, key: order.razorpay_key_id,
       amount: order.amount_paise, currency: order.currency, paid: Boolean(order.payment_verified_at),
-      pending, items: order.items, subtotal: order.subtotal, total: order.total,
+      pending, resumable: !pending && !order.payment_verified_at && order.status === 'Payment Pending',
+      items: order.items, subtotal: order.subtotal, total: order.total,
       discount: order.discount, shipping: order.shipping, promo_code: order.promo_code,
     };
   }
@@ -43,7 +44,7 @@ function createPaymentService({ pool, gateway, env, afterConfirmation, invalidat
         if (order.checkout_fingerprint !== fingerprint || order.payment_method !== 'razorpay') throw new CheckoutError(409, 'This checkout request already belongs to a different basket or payment method');
       } else {
         const address = await ownedAddress(db, userId, input.address_id);
-        const priced = await quote(db, input);
+        const priced = await quoteCart(db, userId, input.promo_code);
         const shippingSnapshot = await prepareShipping(priced, address, 'razorpay', { env, shippingClient });
         const affiliateId = await affiliate(db, input.affiliate_ref);
         const result = await db.query(`INSERT INTO orders
@@ -69,14 +70,54 @@ function createPaymentService({ pool, gateway, env, afterConfirmation, invalidat
       let order = rows[0];
       if (!order || order.payment_method !== 'razorpay' || !order.checkout_key) throw new CheckoutError(404, 'Payment order not found');
       if (order.razorpay_key_id !== env.RAZORPAY_KEY_ID) throw new CheckoutError(409, 'This order uses a previous payment configuration. Contact support.');
-      if (!order.razorpay_order_id) {
+      if (order.payment_verified_at) {
+        await db.query('COMMIT');
+        return checkoutResponse(order);
+      }
+      if (!['Payment Pending', 'Cancelled'].includes(order.status)) throw new CheckoutError(409, 'Order requires support review');
+      const receipt = 'bg_' + crypto.createHash('sha256').update(`${order.user_id}:${order.checkout_key}`).digest('hex').slice(0, 32);
+      if (!order.razorpay_order_id && order.status === 'Payment Pending') {
         // Recover an order created remotely even if its original response was lost.
-        const receipt = 'bg_' + crypto.createHash('sha256').update(`${order.user_id}:${order.checkout_key}`).digest('hex').slice(0, 32);
         const remoteOrders = await gateway().orders.all({ receipt, count: 100 });
         if (!Array.isArray(remoteOrders.items)) throw new Error('Invalid gateway order list');
         const matches = remoteOrders.items.filter(candidate => candidate.receipt === receipt);
         if (matches.length > 1) throw new CheckoutError(409, 'Payment initialization requires support review');
-        const remote = matches[0] || await gateway().orders.create({ amount: order.amount_paise, currency: order.currency,
+        const remote = matches[0];
+        if (remote) {
+          if (!/^order_[a-zA-Z0-9]+$/.test(remote.id) || remote.amount !== order.amount_paise || remote.currency !== order.currency) {
+            throw new Error('Invalid gateway order response');
+          }
+          order = (await db.query('UPDATE orders SET razorpay_order_id = $1 WHERE id = $2 RETURNING *', [remote.id, order.id])).rows[0];
+        }
+      }
+      if (order.razorpay_order_id) {
+        // Resolve an in-flight payment before invalidating its basket. A late
+        // capture on a cancelled order is rejected by confirm, never fulfilled.
+        const payments = await gateway().orders.fetchPayments(order.razorpay_order_id);
+        if (!Array.isArray(payments.items)) throw new Error('Invalid gateway payment list');
+        const captured = payments.items.find(payment => payment.status === 'captured');
+        if (captured) {
+          await db.query('COMMIT');
+          // Release this connection in finally before confirmation acquires one.
+          return confirm(captured, order.id);
+        }
+        if (payments.items.some(payment => ['authorized', 'created'].includes(payment.status))) {
+          if (order.status === 'Cancelled') throw new CheckoutError(409, 'Order requires support review');
+          await db.query('COMMIT');
+          return checkoutResponse(order, true);
+        }
+      }
+      const priced = await quoteCart(db, userId, order.promo_code, { allowEmpty: true });
+      if (order.status === 'Cancelled' || !matchesQuote(order, priced)) {
+        await db.query("UPDATE orders SET status = 'Cancelled' WHERE id = $1", [order.id]);
+        await db.query('COMMIT');
+        await invalidateOrderCache(userId);
+        // Do not return the obsolete gateway ID or amount to checkout.
+        return { id: order.id, stale: true, resumable: false, paid: false, pending: false,
+          current_cart: { ...priced, promo_code: priced.promoCode } };
+      }
+      if (!order.razorpay_order_id) {
+        const remote = await gateway().orders.create({ amount: order.amount_paise, currency: order.currency,
           receipt, notes: { shop_order_id: String(order.id) }, partial_payment: false });
         if (!/^order_[a-zA-Z0-9]+$/.test(remote.id) || remote.amount !== order.amount_paise || remote.currency !== order.currency) {
           throw new Error('Invalid gateway order response');
@@ -145,13 +186,7 @@ function createPaymentService({ pool, gateway, env, afterConfirmation, invalidat
 
   async function status(userId, id) {
     validateConfig(env);
-    const order = await ownedOrder(id, userId);
-    if (order.payment_verified_at) return checkoutResponse(order);
-    const payments = await gateway().orders.fetchPayments(order.razorpay_order_id);
-    if (!Array.isArray(payments.items)) throw new Error('Invalid gateway payment list');
-    const captured = payments.items?.find(payment => payment.status === 'captured');
-    if (captured) return confirm(captured, order.id);
-    return checkoutResponse(order, Boolean(payments.items?.some(payment => ['authorized', 'created'].includes(payment.status))));
+    return initialize(id, userId);
   }
 
   async function webhook(raw, signature) {

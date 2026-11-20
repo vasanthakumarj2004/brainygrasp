@@ -14,6 +14,7 @@ let shipping    = 0;
 let promoDiscount = 0;
 let appliedPromoCode = '';
 let paymentBusy = false;
+let paymentResumeAllowed = false;
 let serverQuote = null;
 let currentTab  = 'profile'; // 'profile' | 'new'
 let userProfile = null;
@@ -175,12 +176,53 @@ window.applyPromo = function() {
 };
 
 // ── Profile Prefill ────────────────────────────────────────────
+function fillProfile(u) {
+  userProfile = u;
+  const name = typeof u.name === 'string' ? u.name : '';
+  document.getElementById('profileInitial').textContent = (name || 'U')[0].toUpperCase();
+  document.getElementById('profileName').textContent = name || 'Your Name';
+  document.getElementById('profileEmail').textContent = typeof u.email === 'string' ? u.email : '';
+  const fields = { codName: 'name', codPhone: 'phone', codLine1: 'address', codCity: 'city', codState: 'state', codPincode: 'pincode' };
+  for (const [id, key] of Object.entries(fields)) {
+    const field = document.getElementById(id);
+    field.value = typeof u[key] === 'string' ? u[key] : '';
+    field.classList.toggle('prefilled', Boolean(field.value));
+  }
+}
+
+function cachedProfileFor(token) {
+  try {
+    // This only selects the account's local cache; API authentication remains
+    // server-side. Never use another account's cached delivery address.
+    const encoded = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const claims = JSON.parse(atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, '=')));
+    const cached = JSON.parse(localStorage.getItem('bg_user') || 'null');
+    if (!Number.isSafeInteger(claims.id) || claims.id <= 0 || cached?.id !== claims.id ||
+        !Number.isFinite(claims.exp) || claims.exp * 1000 <= Date.now()) return null;
+    return cached;
+  } catch { return null; }
+}
+
+function profileNotice(message) {
+  const notice = document.getElementById('profileLoadNotice');
+  notice.textContent = message;
+  notice.style.display = message ? 'block' : 'none';
+}
+
 async function prefillProfile(token) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  const sameSession = () => localStorage.getItem('bg_token') === token;
+  const sessionChanged = () => {
+    profileNotice('Your sign-in changed while checkout was loading. Refresh to load the correct profile.');
+    return false;
+  };
   try {
     const res = await fetch(`${API_BASE}/api/auth/me`, {
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: { 'Authorization': `Bearer ${token}` },
+      cache: 'no-store', signal: controller.signal
     });
-
+    if (!sameSession()) return sessionChanged();
     if (res.status === 401 || res.status === 403) {
       if (window.AuthUnified?.clearAuth) window.AuthUnified.clearAuth();
       else {
@@ -191,41 +233,26 @@ async function prefillProfile(token) {
       window.location.href = 'login.html';
       return false;
     }
-
-    if (!res.ok) return true;
+    if (!res.ok) throw Object.assign(new Error('Profile could not load'), { status: res.status });
     const u = await res.json();
-    userProfile = u;
+    if (!sameSession()) return sessionChanged();
+    if (!u || !Number.isSafeInteger(u.id) || u.id <= 0) throw new Error('Invalid profile response');
     localStorage.setItem('bg_user', JSON.stringify(u));
-
-    // Banner
-    const initial = (u.name || 'U')[0].toUpperCase();
-    document.getElementById('profileInitial').textContent = initial;
-    document.getElementById('profileName').textContent    = u.name  || 'Your Name';
-    document.getElementById('profileEmail').textContent   = u.email || '';
-
-    // Address fields
-    const setVal = (id, val) => { if (val) { const el = document.getElementById(id); if (el) { el.value = val; el.classList.add('prefilled'); } } };
-    setVal('codName',    u.name);
-    setVal('codPhone',   u.phone);
-    setVal('codLine1',   u.address);
-    setVal('codCity',    u.city);
-    setVal('codState',   u.state);
-    setVal('codPincode', u.pincode);
-
+    fillProfile(u);
+    profileNotice('');
     return true;
-
   } catch (e) {
-    console.warn('Profile prefill failed:', e);
-    // Try from localStorage
-    const cached = JSON.parse(localStorage.getItem('bg_user') || 'null');
+    if (!sameSession()) return sessionChanged();
+    const cached = e.status === 404 ? null : cachedProfileFor(token);
     if (cached) {
-      userProfile = cached;
-      document.getElementById('profileInitial').textContent = (cached.name || 'U')[0].toUpperCase();
-      document.getElementById('profileName').textContent    = cached.name  || 'User';
-      document.getElementById('profileEmail').textContent   = cached.email || '';
+      fillProfile(cached);
+      profileNotice('Your latest profile could not load. Showing your saved profile; please review and complete the delivery address before ordering. Refresh to try again.');
+      return true;
     }
-    return true;
-  }
+    document.getElementById('profileName').textContent = 'Profile unavailable';
+    profileNotice('Your profile could not load and no matching saved profile is available. Please refresh to retry before checking out.');
+    return false;
+  } finally { clearTimeout(timer); }
 }
 
 // ── Load Cart (DB-first) ───────────────────────────────────────
@@ -292,9 +319,8 @@ function restoreSavedAddress(attempt) {
 function resetPaymentButton() {
   paymentBusy = false;
   const btn = document.getElementById('btnPlaceOrder');
-  btn.disabled = false;
+  btn.disabled = !activeCart.length && !readPaymentAttempt() && !readCodAttempt();
   updatePayBtn();
-  if (readPaymentAttempt()) btn.textContent = 'Resume / Check Existing Payment';
   if (readCodAttempt()) btn.textContent = 'Resume / Confirm Existing COD Order';
 }
 async function saveAddress(token, addr) {
@@ -318,10 +344,20 @@ async function finishOnlineOrder(token, order) {
   showSuccess(order.id, 'Online payment confirmed. Your order is confirmed.');
 }
 function showSavedQuote(order) {
+  paymentResumeAllowed = !order.pending && order.resumable === true;
   serverQuote = order;
   activeCart = order.items;
   appliedPromoCode = order.promo_code || '';
   renderSummary();
+}
+
+function discardStalePayment(order) {
+  const key = paymentStorageKey();
+  if (key) localStorage.removeItem(key);
+  restoreSavedAddress(null);
+  showSavedQuote(order.current_cart);
+  updatePayBtn();
+  showMsg('Your cart changed. The previous unpaid order was cancelled. Checkout now uses your current cart.', 'info');
 }
 
 async function placeOrder(token, payMethod) {
@@ -405,7 +441,7 @@ function updatePayBtn() {
     document.getElementById('codInfoBox').style.display = 'flex';
     document.getElementById('rzpInfoBox').style.display = 'none';
   }
-  if (saved) btn.textContent = 'Resume / Check Existing Payment';
+  if (saved) btn.textContent = paymentResumeAllowed ? 'Resume / Check Existing Payment' : 'Check Existing Payment';
   if (savedCod) btn.textContent = 'Resume / Confirm Existing COD Order';
 }
 
@@ -420,31 +456,49 @@ async function startRazorpay(token) {
   const btn = document.getElementById('btnPlaceOrder');
   btn.disabled = true;
   btn.textContent = 'Checking payment...';
+  paymentResumeAllowed = false;
   try {
     if (typeof Razorpay !== 'function') throw new Error('The payment window could not load. Please refresh and try again.');
-    if (!attempt) {
-      await loadCart(token);
-      serverQuote = null;
-      if (!renderSummary()) throw new Error('Your cart is empty. Add items before checking out.');
-      const address = await saveAddress(token, addr);
-      attempt = {
-        address: addr,
-        request: {
-          checkout_key: crypto.randomUUID(), address_id: address.id,
-          items: activeCart.map(item => ({ id: item.id, quantity: item.quantity || 1 })),
-          promo_code: appliedPromoCode, affiliate_ref: localStorage.getItem('bg_ref') || null
-        }
-      };
-      // Persist before sending so network retries use the same request key.
+    // Flush edits even when a saved payment exists; the server compares against
+    // this database cart before returning any reusable gateway order.
+    await loadCart(token);
+    let order;
+    for (let tries = 0; tries < 2; tries++) {
+      if (!attempt) {
+        serverQuote = null;
+        if (!renderSummary()) throw new Error('Your cart is empty. Add items before checking out.');
+        const address = await saveAddress(token, addr);
+        attempt = {
+          address: addr,
+          request: {
+            checkout_key: crypto.randomUUID(), address_id: address.id,
+            items: activeCart.map(item => ({ id: item.id, quantity: item.quantity || 1 })),
+            promo_code: appliedPromoCode, affiliate_ref: localStorage.getItem('bg_ref') || null
+          }
+        };
+        // Persist before sending so network retries use the same request key.
+        savePaymentAttempt(attempt);
+      }
+      order = attempt.id
+        ? await apiRequest(`/api/payment/orders/${attempt.id}`, token)
+        : await apiRequest('/api/payment/create-order', token, attempt.request);
+      if (order.stale) {
+        discardStalePayment(order);
+        attempt = null;
+        continue;
+      }
+      attempt.id = order.id;
       savePaymentAttempt(attempt);
+      // Check again immediately before opening checkout, including after a lost response.
+      if (!order.paid) order = await apiRequest(`/api/payment/orders/${order.id}`, token);
+      if (order.stale) {
+        discardStalePayment(order);
+        attempt = null;
+        continue;
+      }
+      break;
     }
-    let order = attempt.id
-      ? await apiRequest(`/api/payment/orders/${attempt.id}`, token)
-      : await apiRequest('/api/payment/create-order', token, attempt.request);
-    attempt.id = order.id;
-    savePaymentAttempt(attempt);
-    // A lost create-order response may belong to an already completed payment.
-    if (!order.paid) order = await apiRequest(`/api/payment/orders/${order.id}`, token);
+    if (order.stale) throw new Error('Your cart changed again. Review the updated cart and retry checkout.');
     if (order.paid) { await finishOnlineOrder(token, order); return; }
     showSavedQuote(order);
     if (order.pending) {
@@ -452,6 +506,7 @@ async function startRazorpay(token) {
       resetPaymentButton();
       return;
     }
+    if (!order.resumable) throw new Error('This order cannot be resumed. Please check its payment status.');
     let completing = false;
     const rzp = new Razorpay({
       key: order.key, amount: order.amount, currency: order.currency, order_id: order.orderId,
@@ -515,10 +570,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('btnPlaceOrder').disabled = true;
     return;
   }
-  if (profileOk === false) return;
+  if (profileOk === false) {
+    document.getElementById('btnPlaceOrder').disabled = true;
+    return;
+  }
 
   // Recover after reload even when the webhook already removed purchased cart items.
-  const savedAttempt = readPaymentAttempt();
+  let savedAttempt = readPaymentAttempt();
   const savedCod = readCodAttempt();
   if (savedCod) {
     restoreSavedAddress(savedCod);
@@ -532,14 +590,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     const radio = document.querySelector('input[name="payMethod"][value="razorpay"]');
     if (radio) radio.checked = true;
     updatePayBtn();
-    if (savedAttempt.id) {
-      try {
-        const order = await apiRequest(`/api/payment/orders/${savedAttempt.id}`, token);
-        if (order.paid) { await finishOnlineOrder(token, order); return; }
+    try {
+      const order = savedAttempt.id
+        ? await apiRequest(`/api/payment/orders/${savedAttempt.id}`, token)
+        : await apiRequest('/api/payment/create-order', token, savedAttempt.request);
+      if (order.paid) { await finishOnlineOrder(token, order); return; }
+      if (order.stale) {
+        discardStalePayment(order);
+        savedAttempt = null;
+      } else {
+        savedAttempt.id = order.id;
+        savePaymentAttempt(savedAttempt);
         showSavedQuote(order);
-        showMsg(`Resume your saved Order #${order.id} to check its payment status. Its basket and delivery address are already saved.`, 'info');
-      } catch (err) { showMsg(err.message); }
-    }
+        showMsg(order.resumable
+          ? `Resume your saved Order #${order.id}. Its cart is unchanged.`
+          : `Payment for Order #${order.id} is awaiting confirmation. Check its status; please do not pay again.`, 'info');
+      }
+    } catch (err) { showMsg(err.message); }
   }
 
 

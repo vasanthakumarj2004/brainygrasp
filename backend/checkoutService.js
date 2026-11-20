@@ -76,6 +76,28 @@ async function quote(db, input = {}) {
   return { items, subtotal, total, shipping, discount, promoCode };
 }
 
+// Lock the saved cart while taking a checkout snapshot. Request items and stored
+// cart prices are never authoritative: quantities come from users, prices from products.
+async function quoteCart(db, userId, promoCode, { allowEmpty = false } = {}) {
+  const { rows } = await db.query('SELECT cart FROM users WHERE id = $1 FOR UPDATE', [userId]);
+  if (!rows[0]) throw new CheckoutError(404, 'User not found');
+  const items = Array.isArray(rows[0].cart) ? rows[0].cart : [];
+  if (allowEmpty && !items.length) {
+    return { items: [], subtotal: 0, total: 0, shipping: 0, discount: 0, promoCode: promoCode || '' };
+  }
+  return quote(db, { items, promo_code: promoCode });
+}
+
+function matchesQuote(order, priced) {
+  const lines = items => JSON.stringify(items.map(item => ({
+    id: Number(item.id), quantity: item.quantity, price: item.price,
+  })).sort((a, b) => a.id - b.id));
+  return lines(order.items) === lines(priced.items) &&
+    ['subtotal', 'total', 'shipping', 'discount'].every(key => order[key] === priced[key]) &&
+    (order.promo_code || '') === priced.promoCode &&
+    order.amount_paise === priced.total * 100 && order.currency === 'INR';
+}
+
 async function ownedAddress(db, userId, addressId) {
   const { rows } = await db.query('SELECT * FROM addresses WHERE id = $1 AND user_id = $2', [positiveId(addressId), userId]);
   if (!rows[0]) throw new CheckoutError(400, 'Delivery address does not belong to this account');
@@ -130,4 +152,4 @@ function sendError(res, err) {
   return res.status(503).json({ error: 'Unable to confirm checkout right now. Please retry the same order.' });
 }
 
-module.exports = { CheckoutError, checkoutIdentity, positiveId, validateAddress, quote, ownedAddress, affiliate, confirmEffects, sendError };
+module.exports = { CheckoutError, checkoutIdentity, positiveId, validateAddress, quote, quoteCart, matchesQuote, ownedAddress, affiliate, confirmEffects, sendError };

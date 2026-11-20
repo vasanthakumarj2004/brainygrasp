@@ -175,6 +175,22 @@ function paymentLabel(order) {
     }
     return normalizedStatus(order.status) === 'payment pending' ? 'Awaiting payment confirmation' : 'Payment not verified';
 }
+function shipmentProgress(order) {
+    const job = order.shipment_progress;
+    if (!job || !['placed', 'paid', 'confirmed'].includes(normalizedStatus(order.status))) return '';
+    const needsHelp = ['needs_review', 'awaiting_parcel'].includes(job.state);
+    let message = needsHelp ? 'Shipment preparation needs attention. Our team will follow up.' :
+        job.state === 'retry' ? 'Shipment processing is delayed. We are retrying automatically.' : 'Preparing your shipment.';
+    if (job.pickup_requested === true) {
+        message = 'Pickup requested. Awaiting courier collection.' +
+            (needsHelp ? ' Our team is checking the remaining shipment details.' : '');
+    } else if (['awb_assigned', 'pickup_pending'].includes(job.phase)) {
+        message = 'Tracking number assigned. Arranging courier pickup.' +
+            (needsHelp ? ' Our team is checking the pickup request.' : job.state === 'retry' ? ' We are retrying automatically.' : '');
+    }
+    return `<p class="tracking-note">${message}</p>${job.pickup_requested === true && job.pickup_scheduled_date
+        ? `<p>Scheduled pickup: <strong>${escapeHTML(job.pickup_scheduled_date)}</strong></p>` : ''}`;
+}
 function renderTrackingBar(order) {
     const status = normalizedStatus(order.status);
     const stages = ['Placed', 'Confirmed', 'Shipped', 'Out for Delivery', 'Delivered'];
@@ -208,6 +224,7 @@ function renderTrackingBar(order) {
             ${stages.map((stage, i) => `<div class="tracking-step ${i < index ? 'completed' : i === index ? 'active' : ''}" ${i === index ? 'aria-current="step"' : ''}><div class="step-icon">${i < index ? '&#10003;' : i + 1}</div><div class="step-label">${stage}</div></div>`).join('')}
         </div>`}
         ${status === 'payment pending' ? '<p><a href="checkout_cod.html">Resume checkout / check payment</a></p>' : ''}
+        ${shipmentProgress(order)}
         <div class="tracking-meta">
             <span>Courier status: <strong>${escapeHTML(order.tracking_status || 'Awaiting courier update')}</strong></span>
             <span>Courier: <strong>${escapeHTML(order.courier_name || 'Not assigned yet')}</strong></span>

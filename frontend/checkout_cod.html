@@ -149,6 +149,7 @@
       padding:10px 14px;border-radius:8px;display:none}
     #coMsg.error{background:#fff5f5;color:#c53030;border:1px solid #feb2b2}
     #coMsg.info{background:#f0fff8;color:var(--green-dark);border:1px solid rgba(0,184,148,.3)}
+    #profileLoadNotice{display:none;padding:12px;border-radius:10px;background:#fff8e6;color:#704700;font-size:.87rem;line-height:1.5}
 
     /* -- ORDER SUMMARY (RIGHT PANEL) -- */
     .sticky-panel{position:sticky;top:80px}
@@ -341,6 +342,8 @@
         </div>
         <a href="profile-setup.html" class="profile-edit-link"><i class="fas fa-pencil-alt"></i> Edit Profile</a>
       </div>
+
+      <p id="profileLoadNotice" role="status" aria-live="polite"></p>
 
       <!-- ADDRESS TABS -->
       <div class="addr-tabs" id="addrTabs">

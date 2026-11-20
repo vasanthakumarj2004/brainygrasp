@@ -9,7 +9,9 @@ const request = () => ({ checkout_key: crypto.randomUUID(), address_id: 10, item
 
 // In-memory transactional adapter; no live credentials, DB, email, or gateway calls.
 function fixture({ environment = env, shippingClient } = {}) {
-  const state = { orders: [], jobs: [], cart: [{ id: 1, quantity: 3 }, { id: 2, quantity: 1 }], commissions: 0, walletCredits: 0, cartWrites: 0 };
+  const state = { orders: [], jobs: [], cart: [{ id: 1, quantity: 2 }], commissions: 0, walletCredits: 0, cartWrites: 0,
+    products: [1, 2].map(id => ({ id, name: `Catalog Toy${id === 1 ? '' : ' 2'}`, price: 500, image: 'toy.png',
+      shipping_weight_g: 300, shipping_length_cm: 10, shipping_breadth_cm: 8, shipping_height_cm: 4 })) };
   const effects = [];
   const calls = { create: 0, fetch: 0, failCreate: false, failFetch: false, failEffects: false };
   let chain = Promise.resolve();
@@ -21,8 +23,7 @@ function fixture({ environment = env, shippingClient } = {}) {
     const q = sql.replace(/\s+/g, ' ').trim();
     if (q.startsWith('SELECT pg_advisory')) return rows([]);
     if (q.startsWith('SELECT * FROM addresses')) return rows(args[0] === 10 && args[1] === 1 ? [address] : []);
-    if (q.startsWith('SELECT id, name, price')) return rows([{ id: 1, name: 'Catalog Toy', price: 500, image: 'toy.png',
-      shipping_weight_g: 300, shipping_length_cm: 10, shipping_breadth_cm: 8, shipping_height_cm: 4 }].filter(p => args[0].includes(p.id)));
+    if (q.startsWith('SELECT id, name, price')) return rows(state.products.filter(p => args[0].includes(p.id)));
     if (q.startsWith('SELECT id FROM affiliates')) return rows([{ id: 7 }]);
     if (q.startsWith('SELECT commission_pct')) return rows([{ commission_pct: '20.00' }]);
     if (q.startsWith('SELECT * FROM orders WHERE user_id')) return rows(state.orders.filter(o => o.user_id === args[0] && o.checkout_key === args[1]));
@@ -42,6 +43,9 @@ function fixture({ environment = env, shippingClient } = {}) {
     }
     if (q.startsWith('UPDATE orders SET razorpay_order_id')) {
       const o = state.orders.find(o => o.id === args[1]); o.razorpay_order_id = args[0]; return rows([o]);
+    }
+    if (q.startsWith("UPDATE orders SET status = 'Cancelled'")) {
+      state.orders.find(o => o.id === args[0]).status = 'Cancelled'; return rows([]);
     }
     if (q.startsWith("UPDATE orders SET status = 'Paid'")) {
       const o = state.orders.find(o => o.id === args[1]);
@@ -83,7 +87,7 @@ function fixture({ environment = env, shippingClient } = {}) {
         if (calls.loseCreateResponse) throw new Error('response lost after remote creation');
         return remote;
       },
-      async fetchPayments() { if (calls.failFetch) throw new Error('simulated timeout'); return { items: structuredClone(payments) }; }
+      async fetchPayments(id) { if (calls.failFetch) throw new Error('simulated timeout'); return { items: structuredClone(payments.filter(p => p.order_id === id)) }; }
     },
     payments: { async fetch() { calls.fetch++; if (calls.failFetch) throw new Error('simulated timeout'); return structuredClone(payment); } }
   });

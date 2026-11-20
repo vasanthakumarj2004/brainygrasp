@@ -166,6 +166,32 @@ test('fresh orders bypass stale cache and query only the signed-in owner', async
     assert.equal(fresh.body[0].status, 'Shipped'); assert.equal(read, 1); assert.equal(write, 0);
     assert.equal(queries[0].args[0], 7); assert.match(queries[0].sql, /WHERE o.user_id = \$1/);
     assert.equal(fresh.headers['Cache-Control'], 'private, no-store');
+    assert.match(queries[0].sql, /LEFT JOIN shipping_jobs sj ON sj.order_id = o.id/);
+    assert.match(queries[0].sql, /AS shipment_progress/);
+    assert.match(queries[0].sql, /'pickup_scheduled_date', sj.details->>'pickupScheduledDate'/);
+    assert.doesNotMatch(queries[0].sql, /sj\.\*|sj\.last_error|'config'|'labelUrl'|'manifestUrl'/);
+});
+
+test('shipment preparation, retry and pickup scheduling appear without inventing collection', () => {
+    const b = browser();
+    const preparing = { ...order, status: 'Paid', shipment_progress: { state: 'queued', phase: 'new' } };
+    assert.match(b.context.renderTrackingBar(preparing), /Preparing your shipment/);
+    const html = job => b.context.renderTrackingBar({ ...preparing, shipment_progress: job });
+    assert.match(html({ state: 'retry', phase: 'created' }), /retrying automatically/);
+    assert.match(html({ state: 'needs_review', phase: 'create_pending' }), /needs attention/);
+    assert.match(html({ state: 'awaiting_parcel', phase: 'new' }), /needs attention/);
+    assert.match(html({ state: 'processing', phase: 'pickup_pending' }), /Arranging courier pickup/);
+    const pickup = html({ state: 'completed', phase: 'complete', pickup_requested: true, pickup_scheduled_date: '2026-11-21' });
+    assert.match(pickup, /Pickup requested. Awaiting courier collection/);
+    assert.match(pickup, /Scheduled pickup:.*2026-11-21/);
+    assert.match(pickup, /Delivery progress: Confirmed/);
+    assert.doesNotMatch(pickup, /Delivery progress: Shipped/);
+    assert.doesNotMatch(html({ state: 'processing', pickup_scheduled_date: '2026-11-21' }), /Scheduled pickup/);
+    assert.doesNotMatch(html({ pickup_requested: true, pickup_scheduled_date: '<img src=x onerror=bad>' }), /<img/);
+    assert.match(html({ pickup_requested: true, pickup_scheduled_date: '<script>' }), /&lt;script&gt;/);
+    assert.doesNotMatch(b.context.renderTrackingBar({ ...preparing, status: 'Delivered' }), /Preparing your shipment/);
+    assert.doesNotMatch(b.context.renderTrackingBar({ ...preparing, status: 'Payment Pending' }), /Preparing your shipment/);
+    assert.doesNotMatch(b.context.renderTrackingBar(order), /Preparing your shipment/);
 });
 test('profile API rejects malformed fields before touching the database', async () => {
     let queries = 0;

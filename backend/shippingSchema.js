@@ -10,6 +10,7 @@ async function migrateShipping(db) {
     ADD COLUMN IF NOT EXISTS awb_number VARCHAR(100), ADD COLUMN IF NOT EXISTS courier_name VARCHAR(100),
     ADD COLUMN IF NOT EXISTS tracking_status VARCHAR(100), ADD COLUMN IF NOT EXISTS estimated_delivery DATE,
     ADD COLUMN IF NOT EXISTS tracking_event_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS tracking_next_check_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     ADD COLUMN IF NOT EXISTS delivery_date DATE`);
   // Older deployments created this column with a smaller limit.
   await db.query('ALTER TABLE orders ALTER COLUMN tracking_status TYPE VARCHAR(100)');
@@ -28,5 +29,7 @@ async function migrateShipping(db) {
   await db.query('CREATE INDEX IF NOT EXISTS ix_shipping_due ON shipping_jobs(state, next_attempt_at)');
   await db.query('CREATE INDEX IF NOT EXISTS ix_delivery_due ON delivery_events(state, next_attempt_at)');
   await db.query('CREATE INDEX IF NOT EXISTS ix_order_awb ON orders(awb_number)');
+  await db.query(`CREATE INDEX IF NOT EXISTS ix_order_tracking_due ON orders(tracking_next_check_at)
+    WHERE awb_number IS NOT NULL AND status IN ('Placed','Paid','Confirmed','Shipped','Out for Delivery')`);
 }
 module.exports = { migrateShipping };

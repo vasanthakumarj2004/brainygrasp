@@ -1,0 +1,2 @@
+# EC2/cloud-init requires Unix line endings for executable shell scripts.
+*.sh text eol=lf

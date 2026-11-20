@@ -1,79 +1,23 @@
-# Run from the project directory:
-# docker compose --env-file backend/.env -f docker-compose.prod.yml up -d --build
-# Use a separately secured environment file for a real production deployment.
+# Compatibility entry point: same split deployment as docker-compose.yml.
+# Default: docker compose up -d
+# Alternative: docker compose -f docker-compose.prod.yml up -d
 services:
+  frontend:
+    extends:
+      file: docker-compose.yml
+      service: frontend
   backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    container_name: brainygrasp_api
-    restart: always
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - SERVE_FRONTEND=true
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:?Set ALLOWED_ORIGINS in the selected environment file}
-      - FRONTEND_URL=${FRONTEND_URL:?Set the HTTPS FRONTEND_URL in the selected environment file}
-      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:?Set DB_PASSWORD}@db:5432/${DB_NAME:-brainygras}
-      - REDIS_URL=redis://default:${REDIS_PASSWORD:?Set REDIS_PASSWORD}@redis:6379
-      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET}
-      - EMAIL_USER=${EMAIL_USER}
-      - EMAIL_PASS=${EMAIL_PASS}
-      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:?Set RAZORPAY_KEY_ID in the selected environment file}
-      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:?Set RAZORPAY_KEY_SECRET in the selected environment file}
-      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET:?Set RAZORPAY_WEBHOOK_SECRET in the selected environment file}
-      - SHIPROCKET_ENABLED=${SHIPROCKET_ENABLED:-false}
-      - SHIPROCKET_EMAIL=${SHIPROCKET_EMAIL:-}
-      - SHIPROCKET_PASSWORD=${SHIPROCKET_PASSWORD:-}
-      - SHIPROCKET_CHANNEL_ID=${SHIPROCKET_CHANNEL_ID:-}
-      - SHIPROCKET_PICKUP_LOCATION=${SHIPROCKET_PICKUP_LOCATION:-}
-      - SHIPROCKET_PICKUP_POSTCODE=${SHIPROCKET_PICKUP_POSTCODE:-}
-      - SHIPROCKET_ORDER_PREFIX=${SHIPROCKET_ORDER_PREFIX:-}
-      - SHIPROCKET_PACKAGES=${SHIPROCKET_PACKAGES:-[]}
-      - SHIPROCKET_WEBHOOK_SECRET=${SHIPROCKET_WEBHOOK_SECRET:-}
-      - ADMIN_USERNAME=${ADMIN_USERNAME:?Set ADMIN_USERNAME}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?Set ADMIN_PASSWORD}
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
+    extends:
+      file: docker-compose.yml
+      service: backend
   db:
-    image: postgres:15-alpine
-    container_name: brainygrasp_postgres
-    restart: always
-    environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME:-brainygras}
-    ports:
-      - "127.0.0.1:5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-brainygras}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
+    extends:
+      file: docker-compose.yml
+      service: db
   redis:
-    image: redis:7-alpine
-    container_name: brainygrasp_redis
-    restart: always
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
-    ports:
-      - "127.0.0.1:6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?Set REDIS_PASSWORD}", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
+    extends:
+      file: docker-compose.yml
+      service: redis
 volumes:
   postgres_data:
   redis_data:

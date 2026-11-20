@@ -74,7 +74,7 @@ test('online order queues exactly once after verified live capture, using saved 
 function bookingFixture() {
   const calls = { create: 0, awb: 0, pickup: 0, label: 0, manifest: 0 };
   const config = shippingConfig(environment);
-  const order = { id: 1, status: 'Placed', payment_method: 'cod', subtotal: 1000, shipping: 0, discount: 100, total: 900, items: [item] };
+  const order = { id: 1, created_at: '2026-11-20T06:00:00Z', status: 'Placed', payment_method: 'cod', subtotal: 1000, shipping: 0, discount: 100, total: 900, items: [item] };
   const job = { phase: 'new', details: { parcel: packItems([item], boxes).parcel, config, reference: '910000000001' } };
   const remote = { remoteOrderId: '10', shipmentId: '20', awb: '', pickupConfirmed: false };
   let exists = false;
@@ -88,6 +88,50 @@ function bookingFixture() {
   const saved = [];
   const run = () => advanceBooking({ job, order, address, user: {}, config, client, save: async j => { saved.push(structuredClone(j)); } });
   return { job, order, remote, client, calls, saved, run };
+}
+
+for (const [operation, phase, response] of [
+  ['createShipment', 'new', { order_id: 10, shipment_id: 20 }],
+  ['assignAWB', 'created', { awb_assign_status: 1, response: { data: { awb_code: 'AWB123' } } }],
+  ['generatePickup', 'awb_assigned', { pickup_status: 1, response: { pickup_scheduled_date: '2026-11-21' } }]
+]) {
+  for (const refresh of [false, true]) test(`${operation} resumes after ${refresh ? '401 refresh' : 'initial'} login timeout`, async () => {
+    const f = bookingFixture(); let logins = 0, requests = 0, failed = false;
+    const adapter = createShiprocketClient({ env: environment, fetchImpl: async url => {
+      if (url.endsWith('/auth/login')) {
+        logins++;
+        if (!failed && (!refresh || logins === 2)) { failed = true; throw Error('Login timeout'); }
+        return { ok: true, json: async () => ({ token: 'fixture-token' }) };
+      }
+      requests++;
+      if (refresh && requests === 1) return { ok: false, status: 401, json: async () => ({}) };
+      return { ok: true, json: async () => response };
+    } });
+    if (refresh) await adapter.getToken();
+    const original = f.client[operation];
+    f.client[operation] = async (...args) => {
+      const result = await adapter[operation](...args);
+      await original(...args); // Simulate the successful remote mutation only.
+      return result;
+    };
+    await assert.rejects(f.run(), { code: 'network', retryable: true, ambiguous: false });
+    assert.equal(f.job.phase, phase);
+    assert.equal(f.calls[operation === 'createShipment' ? 'create' : operation === 'assignAWB' ? 'awb' : 'pickup'], 0);
+    await f.run();
+    assert.equal(f.job.phase, 'complete');
+    assert.deepEqual(f.calls, { create: 1, awb: 1, pickup: 1, label: 1, manifest: 1 });
+    assert.equal(requests, refresh ? 2 : 1);
+  });
+  test(`${operation} still requires reconciliation after an actual mutation timeout`, async () => {
+    const f = bookingFixture();
+    const adapter = createShiprocketClient({ env: environment, fetchImpl: async url => {
+      if (url.endsWith('/auth/login')) return { ok: true, json: async () => ({ token: 'fixture-token' }) };
+      throw Error('Mutation response lost');
+    } });
+    f.client[operation] = adapter[operation];
+    await assert.rejects(f.run(), { ambiguous: true, retryable: true });
+    assert.equal(f.job.phase, operation === 'createShipment' ? 'create_pending' : operation === 'assignAWB' ? 'awb_pending' : 'pickup_pending');
+  });
 }
 
 test('booking creates order, AWB, pickup, label and manifest once; completed resume is a no-op', async () => {
