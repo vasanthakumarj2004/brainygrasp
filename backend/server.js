@@ -69,6 +69,7 @@ app.use(require('./corsPolicy').createCorsPolicy(process.env));
 
 app.post('/api/webhooks/razorpay', express.raw({ type: 'application/json', limit: '256kb' }), paymentRouter.webhook);
 app.use(express.json({ limit: '256kb' }));
+app.use('/', require('./routes/reviewer'));
 
 // ── Route mounting ────────────────────────────────────────────────────────────
 app.use('/', adminRouter);

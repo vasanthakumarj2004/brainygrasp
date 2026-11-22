@@ -1,6 +1,7 @@
 'use strict';
 
 const jwt = require('jsonwebtoken');
+const { reviewerEnabled, validReviewerSession } = require('../reviewerLogin');
 
 function authenticateToken(req, res, next) {
   const SECRET_KEY = process.env.JWT_SECRET;
@@ -14,6 +15,12 @@ function authenticateToken(req, res, next) {
 
   jwt.verify(token, SECRET_KEY, (err, user) => {
     if (err) return res.status(403).json({ error: "Invalid Token" });
+    if (reviewerEnabled(process.env) && !user.reviewer) {
+      return res.status(401).json({ error: 'Use the test account to access the storefront in verification mode.' });
+    }
+    if (user.reviewer && !validReviewerSession(user, process.env)) {
+      return res.status(401).json({ error: 'Verification session ended. Sign in again.' });
+    }
     req.user = user;
     next();
   });

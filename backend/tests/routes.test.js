@@ -3,11 +3,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const path = require('node:path');
 const vm = require('node:vm');
 const { createRequire } = require('node:module');
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const { fixture, request, env } = require('./helpers/paymentFixture');
 const { validateConfig } = require('../paymentService');
 
@@ -59,6 +61,55 @@ test('HTTP payment routes require a valid JWT and bind status to its owner', asy
   const created = await a.send('/api/payment/create-order', request());
   assert.equal(created.status, 200); assert.equal(created.body.amount, 90000);
   assert.equal((await a.send('/api/payment/orders/1', undefined, 2)).status, 404);
+});
+
+test('HTTP OTP login is disabled while verification-only login is enabled', async t => {
+  let poolCalls = 0;
+  const router = load('routes/auth.js', {
+    '../db': { query: async () => { poolCalls++; throw new Error('OTP routes must not access the database'); } },
+    '../otpService': { sendOTP: async () => true },
+    '../redisClient': { getCached: async () => null, setCache: async () => {}, deleteCache: async () => {}, CACHE_KEYS: { OTP: email => email }, TTL: { OTP: 600 } },
+    '../middleware/auth': { authenticateToken: (req, res, next) => next() },
+    '../middleware/rateLimiters': { otpLimiter: (req, res, next) => next() },
+    '../reviewerLogin': { reviewerEnabled: () => true },
+  }, { JWT_SECRET: 'local-test-jwt-secret' });
+  const app = express(); app.use(express.json()); app.use(router);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const requestOtp = await fetch(`${base}/api/auth/request-otp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'user@example.com' }) });
+  const verifyOtp = await fetch(`${base}/api/auth/verify-otp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'user@example.com', otp: '123456' }) });
+  assert.equal(requestOtp.status, 403);
+  assert.equal(verifyOtp.status, 403);
+  assert.equal(poolCalls, 0);
+});
+
+test('verification-only mode rejects existing customer sessions', async t => {
+  const environment = {
+    JWT_SECRET: 'local-test-jwt-secret',
+    REVIEWER_LOGIN_ENABLED: 'true',
+    REVIEWER_PASSWORD_HASH: await bcrypt.hash('reviewer-test-password', 12),
+    RAZORPAY_KEY_ID: 'rzp_test_fixture',
+    RAZORPAY_KEY_SECRET: 'fixture-only-secret',
+    SHIPROCKET_ENABLED: 'false',
+  };
+  const auth = load('middleware/auth.js', {}, environment);
+  const app = express();
+  app.get('/protected', auth.authenticateToken, (req, res) => res.json({ id: req.user.id }));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
+  const base = `http://127.0.0.1:${server.address().port}/protected`;
+  async function get(claims) {
+    return fetch(base, { headers: { Authorization: `Bearer ${jwt.sign(claims, environment.JWT_SECRET)}` } });
+  }
+  assert.equal((await get({ id: 8 })).status, 401);
+  assert.equal((await get({ id: 9, reviewer: true, reviewerVersion: 'invalid' })).status, 401);
+  const reviewerVersion = crypto.createHash('sha256').update(environment.REVIEWER_PASSWORD_HASH).digest('hex');
+  const valid = await get({ id: 10, reviewer: true, reviewerVersion });
+  assert.equal(valid.status, 200);
+  assert.deepEqual(await valid.json(), { id: 10 });
 });
 
 test('HTTP COD calculates prices on the server and rejects another customers address', async t => {

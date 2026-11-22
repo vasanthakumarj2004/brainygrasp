@@ -133,6 +133,16 @@ test('every portal chooses the current EC2/domain origin while retaining local d
   }
 });
 
+test('Docker storefront proxies API requests and leaves test email entry blank', () => {
+  const nginx = fs.readFileSync(path.join(root, 'deploy/nginx/frontend.conf'), 'utf8');
+  assert.match(nginx, /location \^~ \/api\/\s*\{[\s\S]*?proxy_pass http:\/\/backend:5000;/);
+
+  const login = fs.readFileSync(path.join(root, 'frontend/login.html'), 'utf8');
+  const emailInput = login.match(/<input\b[^>]*id="reviewerEmail"[^>]*>/);
+  assert.ok(emailInput);
+  assert.doesNotMatch(emailInput[0], /\svalue=/);
+});
+
 test('deployment configuration fails clearly for missing assets or invalid CORS origins', () => {
   assert.throws(() => mountFrontend(express(), { root: path.join(root, 'missing-deployment-fixture') }), /Frontend files are missing/);
   assert.throws(() => createCorsPolicy({ NODE_ENV: 'production', ALLOWED_ORIGINS: '*' }), /CORS configuration/);

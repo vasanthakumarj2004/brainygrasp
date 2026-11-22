@@ -66,7 +66,8 @@ router.post('/api/orders', authenticateToken, async (req, res) => {
       throw Object.assign(new CheckoutError(409, 'Cart prices have changed. Refresh checkout before confirming your order.'), { checkoutRejected: true });
     }
     const shippingSnapshot = await prepareShipping(priced, address, 'cod');
-    const affiliateId = await affiliate(client, req.body.affiliate_ref);
+    if (req.user.reviewer) Object.assign(shippingSnapshot, { reviewOnly: true, autoBook: false, holdReason: 'Verification test order: do not dispatch.' });
+    const affiliateId = req.user.reviewer ? null : await affiliate(client, req.body.affiliate_ref);
     const { rows } = await client.query(`INSERT INTO orders
       (user_id, address_id, items, subtotal, total, status, payment_method, affiliate_id, shipping, discount, promo_code,
        checkout_key, checkout_fingerprint, shipping_snapshot)

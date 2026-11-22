@@ -169,6 +169,7 @@ function savedAmount(value) {
     return value == null || value === '' || !Number.isFinite(Number(value)) ? 'Not available' : money(value);
 }
 function paymentLabel(order) {
+    if (order.shipping_snapshot?.reviewOnly) return 'Verification test order (COD)';
     if (order.payment_method === 'cod') return 'Cash on delivery';
     if (order.payment_method === 'razorpay' && order.payment_verified_at && order.payment_id) {
         return order.razorpay_key_id?.startsWith('rzp_test_') ? 'Test payment verified' : 'Payment verified';

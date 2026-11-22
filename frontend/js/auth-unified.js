@@ -437,6 +437,11 @@ function resetLoginUI() {
         resendBtn.disabled    = false;
         resendBtn.textContent = 'Resend OTP';
     }
+    const reviewerLoginBtn = document.getElementById('reviewerLoginBtn');
+    if (reviewerLoginBtn) {
+        reviewerLoginBtn.disabled = false;
+        reviewerLoginBtn.textContent = 'Sign in';
+    }
     // Reset form back to Step 1 (email entry) so the OTP digit boxes
     // with stale values are hidden and the user sees a fresh email field.
     const step1 = document.getElementById('authStep1');
@@ -446,7 +451,7 @@ function resetLoginUI() {
     // Clear any stale OTP digits
     document.querySelectorAll('.otp-box').forEach(b => { b.value = ''; });
     // Hide any lingering error messages
-    ['authError', 'otpError', 'otpRequestError'].forEach(id => {
+    ['authError', 'otpError', 'otpRequestError', 'reviewerError'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
     });
@@ -457,9 +462,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // If the user is already authenticated when login.html loads (e.g. they
     // typed the URL directly, or the page was pre-fetched), redirect them to
     // the dashboard immediately — they should never see the sign-in form.
-    if (document.getElementById('requestOTPBtn') && isAuthenticated()) {
-        window.location.replace('dashboard-new.html');
-        return; // stop all further DOMContentLoaded setup
+    const reviewerLoginPage = document.getElementById('reviewerLoginForm');
+    if ((document.getElementById('requestOTPBtn') || reviewerLoginPage) && isAuthenticated()) {
+        if (reviewerLoginPage && getUser()?.reviewer !== true) {
+            clearAuth();
+        } else {
+            window.location.replace('dashboard-new.html');
+            return; // stop all further DOMContentLoaded setup
+        }
     }
 
     // Initialize checkout protection
@@ -622,8 +632,8 @@ document.addEventListener('DOMContentLoaded', () => {
 //      replaces the login history entry with dashboard — they never see the
 //      form at all.
 window.addEventListener('pageshow', (event) => {
-    // Only act on login.html (guard by presence of the OTP request button)
-    if (!document.getElementById('requestOTPBtn')) return;
+    // Only act on login.html.
+    if (!document.getElementById('requestOTPBtn') && !document.getElementById('reviewerLoginForm')) return;
 
     if (event.persisted) {
         // Page was restored from bfcache — always reset UI first
@@ -631,7 +641,9 @@ window.addEventListener('pageshow', (event) => {
 
         // If the user completed login before pressing Back, send them forward
         if (isAuthenticated()) {
-            window.location.replace('dashboard-new.html');
+            const reviewerLoginPage = document.getElementById('reviewerLoginForm');
+            if (reviewerLoginPage && getUser()?.reviewer !== true) clearAuth();
+            else window.location.replace('dashboard-new.html');
         }
     }
 });

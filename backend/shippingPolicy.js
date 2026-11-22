@@ -21,6 +21,7 @@ function shippingConfig(env) {
 }
 
 function eligibleOrder(order) {
+  if (order?.shipping_snapshot?.reviewOnly) throw new ShippingError('review_order', 'Verification test orders cannot create live shipments.');
   if (!order || !['Placed', 'Paid', 'Confirmed'].includes(order.status)) throw new ShippingError('order_status', 'This order is not eligible for shipment booking.');
   if (order.payment_method === 'razorpay') {
     if (!order.payment_verified_at || !order.payment_id || !order.razorpay_order_id || !order.razorpay_key_id?.startsWith('rzp_live_')) {

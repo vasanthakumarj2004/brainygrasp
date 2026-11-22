@@ -21,6 +21,7 @@ const pool    = require('../db'); // shared pool — no duplicate connections
 const { sendOTP } = require('../otpService');
 const { getCached, setCache, deleteCache, CACHE_KEYS, TTL } = require('../redisClient');
 const { authenticateToken } = require('../middleware/auth');
+const { reviewerEnabled } = require('../reviewerLogin');
 
 const SECRET_KEY = process.env.JWT_SECRET;
 const { profile: validateProfile } = require('../../frontend/js/customer-validation');
@@ -33,6 +34,7 @@ const { otpLimiter } = require('../middleware/rateLimiters');
 
 // 1. Request OTP (Email Only)
 router.post('/api/auth/request-otp', otpLimiter, async (req, res) => {
+  if (reviewerEnabled()) return res.status(403).json({ error: 'Email OTP sign-in is unavailable in test verification mode.' });
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
@@ -63,6 +65,7 @@ router.post('/api/auth/request-otp', otpLimiter, async (req, res) => {
 
 // 2. Verify OTP
 router.post('/api/auth/verify-otp', async (req, res) => {
+  if (reviewerEnabled()) return res.status(403).json({ error: 'Use the test email and password to sign in.' });
   const { email, otp } = req.body;
   if (!email || !otp) return res.status(400).json({ error: 'Email and OTP required' });
 
@@ -86,10 +89,11 @@ router.post('/api/auth/verify-otp', async (req, res) => {
       return res.status(401).json({ error: 'Invalid or expired OTP' });
     }
 
-    const userResult = await pool.query('SELECT id, name, email, phone FROM users WHERE email=$1', [email]);
+    const userResult = await pool.query('SELECT id, name, email, phone, role FROM users WHERE email=$1', [email]);
     if (userResult.rows.length === 0) return res.status(401).json({ error: 'Invalid or expired OTP' });
 
     const user = userResult.rows[0];
+    if (user.role === 'REVIEWER') return res.status(403).json({ error: 'Use verification sign-in for this test account.' });
     await deleteCache(CACHE_KEYS.OTP(email));
     await pool.query('UPDATE users SET otp=NULL, otp_expires=NULL WHERE id=$1', [user.id]);
 
