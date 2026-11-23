@@ -36,10 +36,8 @@
             if (url.origin !== window.location.origin || !/^https?:$/.test(url.protocol)) target = 'dashboard-new.html';
             if (target === 'dashboard.html' || target.endsWith('/dashboard.html')) target = 'dashboard-new.html';
             localStorage.removeItem('redirectAfterLogin');
-            if (!signedIn.user.profile_completed) {
-                localStorage.setItem('postProfileRedirect', target);
-                window.location.replace('profile-setup.html');
-            } else window.location.replace(target);
+            localStorage.setItem('postProfileRedirect', target);
+            window.location.replace('profile-setup.html');
         } catch (err) {
             error.textContent = err.message || 'Unable to connect. Please retry.';
             error.style.display = 'block';
