@@ -108,14 +108,13 @@ Compose and recreate the backend:
 ```sh
 docker compose config --quiet
 docker compose up -d --build --force-recreate backend
-docker compose exec -T backend node -e "const {reviewerEnabled}=require('./reviewerLogin'); console.log('reviewer_login_enabled='+reviewerEnabled())"
+docker compose exec -T backend node -e "const {reviewerConfigStatus}=require('./reviewerLogin'); console.log(reviewerConfigStatus(process.env))"
 ```
 
-The final command should print `reviewer_login_enabled=true` without printing
-credentials. If it prints `false`, verify the deployed test-key prefix, matching
-key secret, hash format/cost, feature flag and shipping setting. This mode disables
-normal OTP sign-in and rejects non-reviewer customer sessions; turn it off and
-restore the normal payment configuration after verification.
+The final command prints only boolean checks, never credential values. Each check
+must be `true`; otherwise correct the corresponding backend environment setting.
+This mode disables normal OTP sign-in and rejects non-reviewer customer sessions;
+turn it off and restore the normal payment configuration after verification.
 
 ## Install the host Nginx configuration
 

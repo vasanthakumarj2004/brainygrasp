@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { createReviewerLogin, reviewerEnabled, validReviewerSession } = require('../reviewerLogin');
+const { createReviewerLogin, reviewerConfigStatus, reviewerEnabled, validReviewerSession } = require('../reviewerLogin');
 
 const env = {
   REVIEWER_LOGIN_ENABLED: 'true',
@@ -17,14 +17,25 @@ const env = {
 test('verification login is enabled only with test payments, shipping off, and a bcrypt password hash', async t => {
   env.REVIEWER_PASSWORD_HASH = await bcrypt.hash('reviewer-test-password', 12);
   assert.equal(reviewerEnabled(env), true);
-  for (const change of [
-    { REVIEWER_LOGIN_ENABLED: 'false' },
-    { RAZORPAY_KEY_ID: 'rzp_live_fixture' },
-    { RAZORPAY_KEY_SECRET: '' },
-    { SHIPROCKET_ENABLED: 'true' },
-    { REVIEWER_PASSWORD_HASH: 'plaintext' },
+  assert.deepEqual(reviewerConfigStatus(env), {
+    loginEnabled: true,
+    razorpayTestKey: true,
+    razorpaySecretPresent: true,
+    shippingDisabled: true,
+    passwordHashValid: true,
+    enabled: true,
+  });
+  for (const [change, failedCheck] of [
+    [{ REVIEWER_LOGIN_ENABLED: 'false' }, 'loginEnabled'],
+    [{ RAZORPAY_KEY_ID: 'rzp_live_fixture' }, 'razorpayTestKey'],
+    [{ RAZORPAY_KEY_SECRET: '' }, 'razorpaySecretPresent'],
+    [{ SHIPROCKET_ENABLED: 'true' }, 'shippingDisabled'],
+    [{ REVIEWER_PASSWORD_HASH: 'plaintext' }, 'passwordHashValid'],
   ]) {
-    assert.equal(reviewerEnabled({ ...env, ...change }), false);
+    const status = reviewerConfigStatus({ ...env, ...change });
+    assert.equal(status.enabled, false);
+    assert.equal(status[failedCheck], false);
+    assert.equal(Object.entries(status).filter(([key, value]) => key !== 'enabled' && value === false).length, 1);
   }
 });
 

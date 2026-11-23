@@ -5,10 +5,18 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const EMAIL = 'brainygrasp@gmail.com';
 
+function reviewerConfigStatus(env = process.env) {
+  const checks = {
+    loginEnabled: env.REVIEWER_LOGIN_ENABLED === 'true',
+    razorpayTestKey: /^rzp_test_[A-Za-z0-9]+$/.test(env.RAZORPAY_KEY_ID || ''),
+    razorpaySecretPresent: Boolean(env.RAZORPAY_KEY_SECRET),
+    shippingDisabled: env.SHIPROCKET_ENABLED !== 'true',
+    passwordHashValid: /^\$2[ab]\$12\$[./A-Za-z0-9]{53}$/.test(env.REVIEWER_PASSWORD_HASH || ''),
+  };
+  return { ...checks, enabled: Object.values(checks).every(Boolean) };
+}
 function reviewerEnabled(env = process.env) {
-  return env.REVIEWER_LOGIN_ENABLED === 'true' && /^rzp_test_[A-Za-z0-9]+$/.test(env.RAZORPAY_KEY_ID || '') &&
-    Boolean(env.RAZORPAY_KEY_SECRET) && env.SHIPROCKET_ENABLED !== 'true' &&
-    /^\$2[ab]\$12\$[./A-Za-z0-9]{53}$/.test(env.REVIEWER_PASSWORD_HASH || '');
+  return reviewerConfigStatus(env).enabled;
 }
 function reviewerVersion(env = process.env) {
   return crypto.createHash('sha256').update(env.REVIEWER_PASSWORD_HASH || '').digest('hex');
@@ -40,4 +48,4 @@ function createReviewerLogin({ pool, env = process.env }) {
   };
 }
 
-module.exports = { createReviewerLogin, reviewerEnabled, validReviewerSession };
+module.exports = { createReviewerLogin, reviewerConfigStatus, reviewerEnabled, validReviewerSession };
