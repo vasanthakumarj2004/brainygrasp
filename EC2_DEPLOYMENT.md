@@ -103,16 +103,19 @@ SHIPROCKET_ENABLED=false
 
 The password hash must be generated from the exact test password entered on the
 storefront, with bcryptjs cost 12. After editing the EC2 environment file, validate
-Compose and recreate the backend:
+Compose, update the EC2 checkout, and recreate the backend:
 
 ```sh
-docker compose config --quiet
-docker compose up -d --build --force-recreate backend
-docker compose exec -T backend node -e "const {reviewerConfigStatus}=require('./reviewerLogin'); console.log(reviewerConfigStatus(process.env))"
+git pull --ff-only
+sudo docker compose config --quiet
+sudo docker compose up -d --build --force-recreate backend
+sudo docker compose exec -T backend node -e "const {reviewerConfigStatus}=require('./reviewerLogin'); console.log(reviewerConfigStatus(process.env))"
 ```
 
 The final command prints only boolean checks, never credential values. Each check
 must be `true`; otherwise correct the corresponding backend environment setting.
+If `REVIEWER_LOGIN_ENABLED=true` but another check fails, the backend startup logs
+also name the failed checks without printing credentials.
 This mode disables normal OTP sign-in and rejects non-reviewer customer sessions;
 turn it off and restore the normal payment configuration after verification.
 

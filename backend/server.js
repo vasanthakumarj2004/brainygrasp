@@ -23,6 +23,17 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
+const reviewerConfigStatus = require('./reviewerLogin').reviewerConfigStatus;
+if (process.env.REVIEWER_LOGIN_ENABLED === 'true') {
+  const reviewerStatus = reviewerConfigStatus(process.env);
+  if (!reviewerStatus.enabled) {
+    const failedChecks = Object.entries(reviewerStatus)
+      .filter(([check, valid]) => check !== 'enabled' && !valid)
+      .map(([check]) => check);
+    console.warn(`Reviewer sign-in configuration is incomplete: ${failedChecks.join(', ')}`);
+  }
+}
+
 // ── Startup validation ────────────────────────────────────────────────────────
 const REQUIRED_ENV = ['JWT_SECRET', 'ADMIN_USERNAME', 'ADMIN_PASSWORD'];
 if (!process.env.DATABASE_URL) REQUIRED_ENV.push('DB_PASSWORD');
