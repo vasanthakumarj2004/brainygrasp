@@ -88,12 +88,34 @@ environment has all of the following:
 - `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` set to matching Razorpay **test** credentials
 - `SHIPROCKET_ENABLED=false`
 
-Keep the password hash only in the deployment's secret/environment settings, not
-in Git. On Render, set the two reviewer variables under the service's Environment
-settings. On Docker Compose, set them in the backend environment file selected by
-`APP_ENV_FILE` and recreate the backend container. This mode disables normal OTP
-sign-in and rejects non-reviewer customer sessions; turn it off and restore the
-normal payment configuration after verification.
+In the AWS EC2 deployment, put these values in the backend runtime environment
+file: the root Compose `.env` when `APP_ENV_FILE` is unset, or the file named by
+`APP_ENV_FILE` otherwise. Keep the hash out of Git and wrap it in single quotes:
+Compose may otherwise expand `$` sequences in bcrypt hashes. For example:
+
+```dotenv
+REVIEWER_LOGIN_ENABLED=true
+REVIEWER_PASSWORD_HASH='$2b$12$REPLACE_WITH_THE_COMPLETE_BCRYPT_HASH'
+RAZORPAY_KEY_ID=rzp_test_REPLACE_WITH_TEST_KEY_ID
+RAZORPAY_KEY_SECRET=REPLACE_WITH_MATCHING_TEST_KEY_SECRET
+SHIPROCKET_ENABLED=false
+```
+
+The password hash must be generated from the exact test password entered on the
+storefront, with bcryptjs cost 12. After editing the EC2 environment file, validate
+Compose and recreate the backend:
+
+```sh
+docker compose config --quiet
+docker compose up -d --build --force-recreate backend
+docker compose exec -T backend node -e "const {reviewerEnabled}=require('./reviewerLogin'); console.log('reviewer_login_enabled='+reviewerEnabled())"
+```
+
+The final command should print `reviewer_login_enabled=true` without printing
+credentials. If it prints `false`, verify the deployed test-key prefix, matching
+key secret, hash format/cost, feature flag and shipping setting. This mode disables
+normal OTP sign-in and rejects non-reviewer customer sessions; turn it off and
+restore the normal payment configuration after verification.
 
 ## Install the host Nginx configuration
 
