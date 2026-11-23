@@ -141,6 +141,13 @@ test('Docker storefront proxies API requests and leaves test email entry blank',
   const emailInput = login.match(/<input\b[^>]*id="reviewerEmail"[^>]*>/);
   assert.ok(emailInput);
   assert.doesNotMatch(emailInput[0], /\svalue=/);
+
+  const compose = fs.readFileSync(path.join(root, 'docker-compose.yml'), 'utf8');
+  assert.match(compose, /127\.0\.0\.1:3000:8080/);
+  assert.match(compose, /127\.0\.0\.1:5000:5000/);
+  const environment = fs.readFileSync(path.join(root, '.env.example'), 'utf8');
+  assert.match(environment, /FRONTEND_URL=https:\/\/brainygrasp\.com/);
+  assert.match(environment, /ALLOWED_ORIGINS=https:\/\/brainygrasp\.com,https:\/\/www\.brainygrasp\.com/);
 });
 
 test('deployment configuration fails clearly for missing assets or invalid CORS origins', () => {

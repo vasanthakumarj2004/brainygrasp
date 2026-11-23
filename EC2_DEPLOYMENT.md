@@ -14,6 +14,19 @@ Host Nginx routes / to port 3000 and /api or /api/... directly to port 5000.
 Browsers use the public domain for API calls. Keep ports 3000/5000 private; only
 host Nginx needs them. TLS certificates and Certbot stay on the host.
 
+For the Nginx site shown in the AWS setup, the root `.env` should use:
+
+```dotenv
+FRONTEND_URL=https://brainygrasp.com
+ALLOWED_ORIGINS=https://brainygrasp.com,https://www.brainygrasp.com
+PORT=5000
+SERVE_FRONTEND=false
+```
+
+Compose publishes only `127.0.0.1:3000` (frontend) and `127.0.0.1:5000`
+(backend), matching the host Nginx upstreams. Do not expose these container
+ports publicly or change the Nginx upstreams to the container-only ports.
+
 ## Configure and start
 
 For a new deployment:
@@ -64,6 +77,23 @@ APP_ENV_FILE=/secure/brainygrasp.env docker compose --env-file /secure/brainygra
 Keep SHIPROCKET_ENABLED=false until the existing shipping setup is ready.
 Confirmation still queues automatic shipment creation when enabled. This packaging
 change does not alter payment verification or shipment logic.
+
+### Temporary Razorpay verification login
+
+The storefront's test-account email/password login is disabled unless the backend
+environment has all of the following:
+
+- `REVIEWER_LOGIN_ENABLED=true`
+- `REVIEWER_PASSWORD_HASH` set to a bcryptjs cost-12 hash of the agreed test password
+- `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` set to matching Razorpay **test** credentials
+- `SHIPROCKET_ENABLED=false`
+
+Keep the password hash only in the deployment's secret/environment settings, not
+in Git. On Render, set the two reviewer variables under the service's Environment
+settings. On Docker Compose, set them in the backend environment file selected by
+`APP_ENV_FILE` and recreate the backend container. This mode disables normal OTP
+sign-in and rejects non-reviewer customer sessions; turn it off and restore the
+normal payment configuration after verification.
 
 ## Install the host Nginx configuration
 
