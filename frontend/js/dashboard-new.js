@@ -25,7 +25,7 @@ function clearAuthAndRedirect() {
     clearInterval(refreshTimer);
     ['bg_token', 'bg_user', 'bg_cart', 'redirectAfterLogin', 'postProfileRedirect'].forEach(key => localStorage.removeItem(key));
     document.body.style.visibility = 'hidden';
-    window.location.replace('login.html');
+    window.location.replace('login');
 }
 function checkAuth() {
     if (signedOut || !localStorage.getItem('bg_token')) { clearAuthAndRedirect(); return false; }
@@ -128,7 +128,7 @@ function renderOrders(list, type) {
     // Preserve expanded details when the automatic refresh replaces the cards.
     const expanded = new Set([...container.querySelectorAll('details[open]')].map(detail => detail.dataset.orderDetails));
     if (!list.length) {
-        container.innerHTML = `<div class="empty-state"><i class="fas fa-box-open empty-icon" aria-hidden="true"></i><strong>No ${type === 'current' ? 'current' : 'past'} orders yet.</strong><p>${type === 'current' ? 'Your next little discovery is waiting.' : 'Completed deliveries and past orders will appear here.'}</p>${type === 'current' ? '<a class="btn btn-primary" href="index.html">Continue shopping</a>' : ''}</div>`;
+        container.innerHTML = `<div class="empty-state"><i class="fas fa-box-open empty-icon" aria-hidden="true"></i><strong>No ${type === 'current' ? 'current' : 'past'} orders yet.</strong><p>${type === 'current' ? 'Your next little discovery is waiting.' : 'Completed deliveries and past orders will appear here.'}</p>${type === 'current' ? '<a class="btn btn-primary" href="index">Continue shopping</a>' : ''}</div>`;
         return;
     }
     container.innerHTML = list.map(order => {
@@ -224,7 +224,7 @@ function renderTrackingBar(order) {
             <div class="tracking-progress-line" style="width:${index * 20}%"></div>
             ${stages.map((stage, i) => `<div class="tracking-step ${i < index ? 'completed' : i === index ? 'active' : ''}" ${i === index ? 'aria-current="step"' : ''}><div class="step-icon">${i < index ? '&#10003;' : i + 1}</div><div class="step-label">${stage}</div></div>`).join('')}
         </div>`}
-        ${status === 'payment pending' ? '<p><a href="checkout_cod.html">Resume checkout / check payment</a></p>' : ''}
+        ${status === 'payment pending' ? '<p><a href="checkout_cod">Resume checkout / check payment</a></p>' : ''}
         ${shipmentProgress(order)}
         <div class="tracking-meta">
             <span>Courier status: <strong>${escapeHTML(order.tracking_status || 'Awaiting courier update')}</strong></span>

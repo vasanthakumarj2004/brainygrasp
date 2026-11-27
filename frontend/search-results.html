@@ -312,15 +312,15 @@
   <link rel="stylesheet" href="css/policy-mobile.css">
 </head>
 <body>
-    <!-- Include header from index.html -->
+    <!-- Include header from index -->
     <header style="padding:18px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
-      <a href="index.html" style="font-family:Fredoka,sans-serif;font-size:24px">BrainyGrasp</a>
-      <form action="search-results.html" method="get" style="display:flex;gap:8px">
+      <a href="index" style="font-family:Fredoka,sans-serif;font-size:24px">BrainyGrasp</a>
+      <form action="search-results" method="get" style="display:flex;gap:8px">
         <label for="catalogQuery" class="sr-only">Search products</label>
         <input id="catalogQuery" name="q" type="search" placeholder="Search products" minlength="2" maxlength="100" required>
         <button type="submit">Search</button>
       </form>
-      <a href="cart.html">Cart (<span class="cart-count">0</span>)</a>
+      <a href="cart">Cart (<span class="cart-count">0</span>)</a>
     </header>
 
     <!-- Search Results Header -->
@@ -384,7 +384,7 @@
     </div>
 
     <!-- Include footer -->
-    <footer style="text-align:center;padding:32px"><a href="index.html">Home</a> | <a href="shipping-policy.html">Shipping</a> | <a href="privacy-policy.html">Privacy</a></footer>
+    <footer style="text-align:center;padding:32px"><a href="index">Home</a> | <a href="shipping-policy">Shipping</a> | <a href="privacy-policy">Privacy</a></footer>
 
     <dialog id="searchQuickView" aria-labelledby="searchQuickViewTitle" style="max-width:560px;width:90%;border:0;border-radius:16px;padding:24px">
       <form method="dialog"><button aria-label="Close product details" style="float:right">Close</button></form>

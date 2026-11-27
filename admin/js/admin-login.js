@@ -27,7 +27,7 @@
 
       if (res.ok && data.token) {
         setToken(data.token);
-        window.location.href = 'dashboard.html';
+        window.location.href = 'dashboard';
       } else {
         errorDiv.textContent = data.error || 'Invalid credentials';
         errorDiv.style.display = 'block';

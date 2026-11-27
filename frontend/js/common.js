@@ -612,12 +612,12 @@ function initAddToCart() {
 
 function initCommerceRoutes() {
 
-  // View Cart button → cart.html
+  // View Cart button → cart
   document.querySelectorAll('.btn-view-cart, .btn-view-cart-modern').forEach(btn => {
 
     btn.addEventListener('click', () => {
 
-      window.location.href = 'cart.html';
+      window.location.href = 'cart';
 
     });
 
@@ -631,7 +631,7 @@ function initGlobalLinks() {
 
   document.querySelectorAll('a.logo, a.footer-logo').forEach(link => {
 
-    if (link.getAttribute('href') === '/') link.setAttribute('href', 'index.html');
+    if (link.getAttribute('href') === '/') link.setAttribute('href', 'index');
 
   });
 
@@ -651,7 +651,7 @@ function initGlobalLinks() {
 
   document.querySelectorAll('a[href="#help"]').forEach(link => {
 
-    link.setAttribute('href', 'faqs.html');
+    link.setAttribute('href', 'faqs');
 
   });
 
@@ -661,7 +661,7 @@ function initGlobalLinks() {
 
     if (cls.includes('btn') || cls.includes('shop') || cls.includes('blog-read-more')) {
 
-      link.setAttribute('href', 'collections.html');
+      link.setAttribute('href', 'collections');
 
     }
 
@@ -709,31 +709,31 @@ function initSEOMeta() {
 
   const map = {
 
-    'index.html': { title: 'BrainyGrasp | Learning Toys for Kids', desc: 'Shop educational toys for every age group at BrainyGrasp.' },
+    'index': { title: 'BrainyGrasp | Learning Toys for Kids', desc: 'Shop educational toys for every age group at BrainyGrasp.' },
 
-    'shop-by-age.html': { title: 'Shop By Age | BrainyGrasp', desc: 'Find age-appropriate toys from infants to 8+ years.' },
+    'shop-by-age': { title: 'Shop By Age | BrainyGrasp', desc: 'Find age-appropriate toys from infants to 8+ years.' },
 
-    'shop-by-category.html': { title: 'Shop By Category | BrainyGrasp', desc: 'Browse educational toys by category and learning goals.' },
+    'shop-by-category': { title: 'Shop By Category | BrainyGrasp', desc: 'Browse educational toys by category and learning goals.' },
 
-    'collections.html': { title: 'Collections | BrainyGrasp', desc: 'Explore bestsellers, new launches, bundles, and gifting picks.' },
+    'collections': { title: 'Collections | BrainyGrasp', desc: 'Explore bestsellers, new launches, bundles, and gifting picks.' },
 
-    'parents-choice.html': { title: 'Parents Choice | BrainyGrasp', desc: 'Curated educational toys most loved by parents.' },
+    'parents-choice': { title: 'Parents Choice | BrainyGrasp', desc: 'Curated educational toys most loved by parents.' },
 
-    'gift-finder.html': { title: 'Gift Finder | BrainyGrasp', desc: 'Find the perfect educational gift in a few steps.' },
+    'gift-finder': { title: 'Gift Finder | BrainyGrasp', desc: 'Find the perfect educational gift in a few steps.' },
 
-    'blogs.html': { title: 'BrainyGrasp Blog', desc: 'Guides and parenting ideas for playful learning.' },
+    'blogs': { title: 'BrainyGrasp Blog', desc: 'Guides and parenting ideas for playful learning.' },
 
-    'faqs.html': { title: 'FAQs | BrainyGrasp', desc: 'Frequently asked questions about orders, products, and safety.' },
+    'faqs': { title: 'FAQs | BrainyGrasp', desc: 'Frequently asked questions about orders, products, and safety.' },
 
-    'rewards.html': { title: 'Rewards | BrainyGrasp', desc: 'Earn and redeem points with BrainyGrasp rewards.' },
+    'rewards': { title: 'Rewards | BrainyGrasp', desc: 'Earn and redeem points with BrainyGrasp rewards.' },
 
-    'about.html': { title: 'About BrainyGrasp', desc: 'Learn our mission to make learning joyful and practical.' },
+    'about': { title: 'About BrainyGrasp', desc: 'Learn our mission to make learning joyful and practical.' },
 
-    'cart.html': { title: 'Your Cart | BrainyGrasp', desc: 'Review items in your cart before checkout.' },
+    'cart': { title: 'Your Cart | BrainyGrasp', desc: 'Review items in your cart before checkout.' },
 
   };
 
-  const file = window.location.pathname.split('/').pop() || 'index.html';
+  const file = window.location.pathname.split('/').pop() || 'index';
 
   const data = map[file];
 
@@ -1138,7 +1138,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Updates #userBtn in the header to show user's name (→ dashboard) when logged in,
 
-// or 'Sign In' (→ login.html) when logged out.
+// or 'Sign In' (→ login) when logged out.
 
 function syncAuthHeader() {
 
@@ -1158,7 +1158,7 @@ function syncAuthHeader() {
 
     const firstName = (user && user.name ? user.name : 'Account').split(' ')[0];
 
-    userBtn.href = 'dashboard-new.html';
+    userBtn.href = 'dashboard-new';
 
     userBtn.title = `Hi, ${firstName} – View Dashboard`;
 
@@ -1176,7 +1176,7 @@ function syncAuthHeader() {
 
     // Logged out: standard Sign In link
 
-    userBtn.href = 'login.html';
+    userBtn.href = 'login';
 
     userBtn.title = 'Sign In';
 
@@ -1228,7 +1228,7 @@ function initMegaNavigation() {
 
       const url = new URL(href, window.location.origin);
 
-      if (url.pathname.endsWith('parents-choice.html') && url.hash) {
+      if (url.pathname.endsWith('parents-choice') && url.hash) {
 
         const slug = url.hash.replace('#', '');
 
@@ -1248,7 +1248,7 @@ function initMegaNavigation() {
 
         if (mapping[slug]) {
 
-          targetUrl = `shop-by-category.html?category=${encodeURIComponent(mapping[slug])}`;
+          targetUrl = `shop-by-category?category=${encodeURIComponent(mapping[slug])}`;
 
         }
 

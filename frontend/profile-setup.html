@@ -375,15 +375,15 @@
 
             // Auth guard
             const token = localStorage.getItem('bg_token');
-            if (!token) { window.location.href = 'login.html'; return; }
+            if (!token) { window.location.href = 'login'; return; }
 
             // Determine where to go after profile save
             // postProfileRedirect is set by auth-unified.js during login
-            let postRedirect = localStorage.getItem('postProfileRedirect') || 'dashboard-new.html';
+            let postRedirect = (localStorage.getItem('postProfileRedirect') || 'dashboard-new').replace(/\.html(?=[?#]|$)/, '');
 
             // ── BUG FIX: Handle stale localStorage values from before the fix
-            if (postRedirect === 'dashboard.html' || postRedirect.endsWith('/dashboard.html')) {
-                postRedirect = 'dashboard-new.html';
+            if (postRedirect === 'dashboard' || postRedirect.endsWith('/dashboard')) {
+                postRedirect = 'dashboard-new';
             }
 
             // Update skip link to go to postRedirect too

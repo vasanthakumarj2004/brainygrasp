@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <p>${catalogEscape(p.category || '')} · ${catalogEscape(p.age || p.ageGroup || '')}</p>
       ${productDetailsHTML(p)}<p>${catalogEscape(p.offer || '')}</p>
       <div class="search-product-gallery">${(p.details?.images || []).slice(1).map(picture => `<figure><img src="${catalogEscape(productImageUrl(picture.src))}" alt="${catalogEscape(p.name + ' - ' + picture.label)}" loading="lazy"><figcaption>${catalogEscape(picture.label)}</figcaption></figure>`).join('')}</div>
-      <button data-search-add="${id}">Add to Cart</button> <a href="cart.html">View cart</a>`;
+      <button data-search-add="${id}">Add to Cart</button> <a href="cart">View cart</a>`;
     if (!dialog.open) dialog.showModal();
   }
   document.getElementById('searchFilters').addEventListener('change', () => { page = 1; render(); });

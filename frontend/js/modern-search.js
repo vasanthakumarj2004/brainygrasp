@@ -146,7 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             resultsArea.innerHTML = products.map(item => `
-                <a href="search-results.html?q=${encodeURIComponent(item.name)}" class="search-result-card">
+                <a href="search-results?q=${encodeURIComponent(item.name)}" class="search-result-card">
                     <img src="${escapeHTML(item.image || '')}"
                          alt="${escapeHTML(item.name)}"
                          class="search-result-img"
@@ -188,7 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function navigateToSearch(term) {
         const q = (term || '').trim();
         if (!q) return;
-        window.location.href = `search-results.html?q=${encodeURIComponent(q)}`;
+        window.location.href = `search-results?q=${encodeURIComponent(q)}`;
     }
 
     // Enter key → navigate to full search results page

@@ -62,7 +62,7 @@ test('Docker proxy serves every HTML page and referenced local script/style/imag
   const assets = new Set(); let pages = 0;
   for (const folder of ['frontend', 'admin']) {
     for (const file of fs.readdirSync(path.join(root, folder), { recursive: true }).filter(f => f.endsWith('.html'))) {
-      const route = (folder === 'admin' ? '/admin/' : '/') + file.replace(/\\/g, '/');
+      const route = (folder === 'admin' ? '/admin/' : '/') + file.replace(/\\/g, '/').slice(0, -5);
       const url = new URL(route, base);
       const response = await get(url);
       assert.equal(response.status, 200, route);
@@ -81,6 +81,12 @@ test('Docker proxy serves every HTML page and referenced local script/style/imag
 });
 
 test('Docker proxy preserves portal redirects, legacy URLs and API paths', smoke, async () => {
+  for (const route of ['/index.html', '/admin/orders.html', '/affiliate/login.html', '/frontend/cart.html']) {
+    const response = await get(new URL(route + '?ref=PARTNER&q=blocks%20games', base), { redirect: 'manual' });
+    assert.equal(response.status, 308, route);
+    assert.equal(response.headers.get('location'), route.slice(0, -5) + '?ref=PARTNER&q=blocks%20games');
+    assert.equal((await get(new URL(response.headers.get('location'), base), { redirect: 'manual' })).status, 200);
+  }
   for (const route of ['/', '/admin/', '/affiliate/', '/frontend/index.html', '/frontend/js/config.js', '/about']) {
     const response = await get(new URL(route, base));
     assert.equal(response.status, 200, route);

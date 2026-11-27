@@ -40,7 +40,7 @@ async function fetchWithAuth(url, options = {}) {
     if (!res.ok) {
         if (res.status === 401 || res.status === 403) {
             clearAuth();
-            window.location.href = 'login.html';
+            window.location.href = 'login';
         }
         const err = await res.json().catch(() => ({ error: 'Request failed' }));
         throw new Error(err.error || 'Request failed');
@@ -495,7 +495,7 @@ async function loadOrders() {
                 <div class="orders-empty" style="text-align:center; padding:40px;">
                     <i class="fas fa-box-open" style="font-size:40px; color:#ccc;"></i>
                     <p>No orders yet. Your cart is waiting!</p>
-                    <a href="index.html" class="btn btn-primary">Start Shopping</a>
+                    <a href="index" class="btn btn-primary">Start Shopping</a>
                 </div>
             `;
             return;
@@ -557,7 +557,7 @@ function initQuickActions() {
         e.preventDefault();
         if(confirm("Are you sure you want to logout?")) {
             clearAuth();
-            window.location.href = 'index.html';
+            window.location.href = 'index';
         }
     });
 }
@@ -585,7 +585,7 @@ document.addEventListener('DOMContentLoaded', () => {
             profileCard.innerHTML = `
                 <div style="text-align:center; padding:20px;">
                     <p>Log in to view your profile and orders.</p>
-                    <a href="login.html" class="btn btn-primary">Sign In</a>
+                    <a href="login" class="btn btn-primary">Sign In</a>
                 </div>
             `;
         }

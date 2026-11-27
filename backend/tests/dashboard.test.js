@@ -49,7 +49,7 @@ test('dashboard logout waits for server revocation and retains access when the r
     assert.equal(b.calls.at(-1).options.method, 'POST');
     finish({ ok: true, status: 200, json: async () => ({ success: true }) });
     await pending;
-    assert.equal(b.storage.get('bg_token'), undefined); assert.equal(b.redirects.at(-1), 'login.html');
+    assert.equal(b.storage.get('bg_token'), undefined); assert.equal(b.redirects.at(-1), 'login');
 });
 
 test('profile failure does not block orders; retry restores complete profile', async () => {
@@ -141,7 +141,7 @@ test('invalid profile fields do not submit; session expiry clears data and polli
     assert.equal(b.calls.length, count); assert.match(b.elements.get('profileSaveFeedback').textContent, /PIN/);
     b.respond(async () => ({ ok: false, status: 401 })); await b.context.loadOrders();
     assert.equal(b.storage.has('bg_token'), false);
-    assert.equal(b.intervals.size, 0); assert.equal(b.redirects.at(-1), 'login.html');
+    assert.equal(b.intervals.size, 0); assert.equal(b.redirects.at(-1), 'login');
 });
 test('history action opens the selected past delivery and tab switching preserves tracking', async () => {
     const b = browser(); await b.ready();

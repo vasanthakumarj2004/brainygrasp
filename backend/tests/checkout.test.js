@@ -129,7 +129,7 @@ test('expired or unreadable session cannot select cached profile on API failure'
 test('unauthorized profile redirects to login instead of using cached delivery details', async () => {
   for (const status of [401, 403]) {
     const b = await browser({ cachedProfile: profile, respond: url => url === '/api/auth/me' ? { status, data: {} } : undefined });
-    assert.equal(b.context.window.location.href, 'login.html');
+    assert.equal(b.context.window.location.href, 'login');
     assert.equal(b.storage.has('bg_token'), false); assert.equal(b.storage.has('bg_user'), false);
     assert.equal(b.element('codLine1').value, ''); assert.equal(b.element('btnPlaceOrder').disabled, true);
   }

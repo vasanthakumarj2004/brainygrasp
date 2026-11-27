@@ -29,7 +29,7 @@ async function logoutCustomer() {
             const response = await fetch(`${API_BASE}/api/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
             if (!response.ok && response.status !== 401) throw new Error('Unable to sign out. Please retry.');
         }
-        clearAuth(); clearLocalCart(); window.location.href = 'index.html';
+        clearAuth(); clearLocalCart(); window.location.href = 'index';
     } catch { showAuthError('logoutError', 'Unable to sign out. Check your connection and retry.'); }
 }
 
@@ -123,7 +123,7 @@ function initCheckoutProtection() {
             // 2. Check auth status
             if (!isAuthenticated()) {
                 // Save redirect intent
-                const targetUrl = checkoutLink.href || checkoutLink.dataset.href || 'checkout_cod.html';
+                const targetUrl = checkoutLink.href || checkoutLink.dataset.href || 'checkout_cod';
                 localStorage.setItem('redirectAfterLogin', targetUrl);
 
                 // Show custom login prompt modal with required message
@@ -139,7 +139,7 @@ function initCheckoutProtection() {
                                 <p style="color: #666; margin-bottom: 25px; font-size: 16px; line-height: 1.5; margin-top: 0;">Please sign in to checkout your cart items.</p>
                                 <div style="display: flex; gap: 15px; justify-content: center;">
                                     <button onclick="document.getElementById('authUnifiedModal').style.display='none'" style="flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #ddd; background: white; color: #333; font-weight: bold; font-size: 16px; cursor: pointer;">Cancel</button>
-                                    <button onclick="window.location.href='login.html'" style="flex: 1; padding: 12px; border-radius: 10px; border: none; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 4px 15px rgba(102,126,234,0.3);">Sign In</button>
+                                    <button onclick="window.location.href='login'" style="flex: 1; padding: 12px; border-radius: 10px; border: none; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: bold; font-size: 16px; cursor: pointer; box-shadow: 0 4px 15px rgba(102,126,234,0.3);">Sign In</button>
                                 </div>
                             </div>
                         </div>
@@ -154,13 +154,13 @@ function initCheckoutProtection() {
             // Wait for all durable changes before navigating away.
             if (!await window.CartSync.sync()) {
                 if (!isAuthenticated()) {
-                    localStorage.setItem('redirectAfterLogin', checkoutLink.href || 'checkout_cod.html');
-                    window.location.href = 'login.html';
+                    localStorage.setItem('redirectAfterLogin', checkoutLink.href || 'checkout_cod');
+                    window.location.href = 'login';
                 }
                 return;
             }
             // User is authenticated, proceed to checkout
-            const targetUrl = checkoutLink.href || 'checkout_cod.html';
+            const targetUrl = checkoutLink.href || 'checkout_cod';
             window.location.href = targetUrl;
         }
     });
@@ -241,21 +241,21 @@ async function handleVerifyOTP() {
                 const profileData = await profileResponse.json();
 
                 // 5. Smart Redirect based on profile completion
-                let redirectPath = localStorage.getItem('redirectAfterLogin');
+                let redirectPath = localStorage.getItem('redirectAfterLogin')?.replace(/\.html(?=[?#]|$)/, '');
                 
                 // ── BUG FIX: Handle stale localStorage values from before the fix
-                if (redirectPath === 'dashboard.html' || (redirectPath && redirectPath.endsWith('/dashboard.html'))) {
-                    redirectPath = 'dashboard-new.html';
+                if (redirectPath === 'dashboard' || (redirectPath && redirectPath.endsWith('/dashboard'))) {
+                    redirectPath = 'dashboard-new';
                 }
 
                 if (!profileData.profile_completed) {
                     // First-time user: save where they eventually want to land
                     // after completing their profile (checkout or dashboard)
-                    localStorage.setItem('postProfileRedirect', redirectPath || 'dashboard-new.html');
+                    localStorage.setItem('postProfileRedirect', redirectPath || 'dashboard-new');
                     localStorage.removeItem('redirectAfterLogin');
-                    // Use replace() — removes login.html from browser history so
+                    // Use replace() — removes login from browser history so
                     // pressing Back from profile-setup skips over login entirely.
-                    window.location.replace('profile-setup.html');
+                    window.location.replace('profile-setup');
                 } else if (redirectPath) {
                     // Returning user: go to their saved intent (checkout, etc.)
                     localStorage.removeItem('redirectAfterLogin');
@@ -264,24 +264,24 @@ async function handleVerifyOTP() {
                     window.location.replace(redirectPath);
                 } else {
                     // Returning user: default → dashboard
-                    window.location.replace('dashboard-new.html');
+                    window.location.replace('dashboard-new');
                 }
             } catch (error) {
                 console.error('Profile status check failed:', error);
                 // Fallback: use data.user from the JWT response
-                let redirectPath = localStorage.getItem('redirectAfterLogin');
-                if (redirectPath === 'dashboard.html' || (redirectPath && redirectPath.endsWith('/dashboard.html'))) {
-                    redirectPath = 'dashboard-new.html';
+                let redirectPath = localStorage.getItem('redirectAfterLogin')?.replace(/\.html(?=[?#]|$)/, '');
+                if (redirectPath === 'dashboard' || (redirectPath && redirectPath.endsWith('/dashboard'))) {
+                    redirectPath = 'dashboard-new';
                 }
                 if (!data.user.profile_completed) {
-                    localStorage.setItem('postProfileRedirect', redirectPath || 'dashboard-new.html');
+                    localStorage.setItem('postProfileRedirect', redirectPath || 'dashboard-new');
                     localStorage.removeItem('redirectAfterLogin');
-                    window.location.replace('profile-setup.html');
+                    window.location.replace('profile-setup');
                 } else if (redirectPath) {
                     localStorage.removeItem('redirectAfterLogin');
                     window.location.replace(redirectPath);
                 } else {
-                    window.location.replace('dashboard-new.html');
+                    window.location.replace('dashboard-new');
                 }
             }
         } else {
@@ -348,7 +348,7 @@ async function fetchUserProfile() {
         } else if (response.status === 401 || response.status === 403) {
             // Token expired, clear auth and redirect to login
             clearAuth();
-            window.location.href = 'login.html';
+            window.location.href = 'login';
             return null;
         }
     } catch (err) {
@@ -464,12 +464,12 @@ function resetLoginUI() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    // ── Early auth guard (login.html only) ───────────────────────────────
-    // If the user is already authenticated when login.html loads (e.g. they
+    // ── Early auth guard (login only) ───────────────────────────────
+    // If the user is already authenticated when login loads (e.g. they
     // typed the URL directly, or the page was pre-fetched), redirect them to
     // the dashboard immediately — they should never see the sign-in form.
     if (document.getElementById('requestOTPBtn') && isAuthenticated()) {
-        window.location.replace('dashboard-new.html');
+        window.location.replace('dashboard-new');
         return; // stop all further DOMContentLoaded setup
     }
 
@@ -620,7 +620,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// ── bfcache / Back-Forward Navigation Guard (login.html only) ────────────
+// ── bfcache / Back-Forward Navigation Guard (login only) ────────────
 // The browser's back-forward cache (bfcache) can restore a page from memory
 // without re-running DOMContentLoaded. The 'pageshow' event fires in BOTH
 // cases; when event.persisted is true the page was restored from bfcache.
@@ -633,7 +633,7 @@ document.addEventListener('DOMContentLoaded', () => {
 //      replaces the login history entry with dashboard — they never see the
 //      form at all.
 window.addEventListener('pageshow', (event) => {
-    // Only act on login.html (guard by presence of the OTP request button)
+    // Only act on login (guard by presence of the OTP request button)
     if (!document.getElementById('requestOTPBtn')) return;
 
     if (event.persisted) {
@@ -642,7 +642,7 @@ window.addEventListener('pageshow', (event) => {
 
         // If the user completed login before pressing Back, send them forward
         if (isAuthenticated()) {
-            window.location.replace('dashboard-new.html');
+            window.location.replace('dashboard-new');
         }
     }
 });

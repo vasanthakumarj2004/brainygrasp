@@ -15,12 +15,12 @@ function getAffUser() {
 
 function checkAuth(requireAuth = true) {
   const token = getAffToken();
-  const isLoginPage = window.location.pathname.endsWith('login.html') || window.location.pathname.endsWith('/affiliate') || window.location.pathname.endsWith('/affiliate/');
+  const isLoginPage = window.location.pathname.endsWith('login') || window.location.pathname.endsWith('/affiliate') || window.location.pathname.endsWith('/affiliate/');
 
   if (requireAuth && !token) {
-    if (!isLoginPage) window.location.href = 'login.html';
+    if (!isLoginPage) window.location.href = 'login';
   } else if (!requireAuth && token) {
-    if (isLoginPage) window.location.href = 'dashboard.html';
+    if (isLoginPage) window.location.href = 'dashboard';
   }
 }
 
@@ -44,7 +44,7 @@ async function loginAffiliate(email, password) {
     localStorage.setItem('bg_aff_token', data.token);
     localStorage.setItem('bg_aff_user', JSON.stringify(data.affiliate));
 
-    window.location.href = 'dashboard.html';
+    window.location.href = 'dashboard';
   } catch (err) {
     if (msgEl) {
       msgEl.className = 'msg-alert error';
@@ -65,7 +65,7 @@ async function logoutAffiliate() {
   } catch { window.alert('Unable to sign out. Check your connection and retry.'); return; }
   localStorage.removeItem('bg_aff_token');
   localStorage.removeItem('bg_aff_user');
-  window.location.href = 'login.html';
+  window.location.href = 'login';
 }
 
 window.getAffToken = getAffToken;

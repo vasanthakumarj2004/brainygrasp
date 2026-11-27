@@ -33,7 +33,7 @@ test('one server serves every storefront, admin and affiliate page with local sc
   const base = await site(t);
   const pages = ['/', '/admin/', '/affiliate/', '/frontend/'];
   for (const [folder, prefix] of [['frontend', '/'], ['admin', '/admin/'], ['frontend/affiliate', '/affiliate/']]) {
-    pages.push(...fs.readdirSync(path.join(root, folder)).filter(file => file.endsWith('.html')).map(file => prefix + file));
+    pages.push(...fs.readdirSync(path.join(root, folder)).filter(file => file.endsWith('.html')).map(file => prefix + file.slice(0, -5)));
   }
   const checked = new Set();
   for (const page of pages) {
@@ -194,8 +194,45 @@ test('frontend server proxies API methods, bodies and responses to the local bac
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
     body,
   });
+
+  for (const legacy of ['/index.html', '/admin/orders.html', '/affiliate/login.html', '/frontend/cart.html']) {
+    const base = 'http://127.0.0.1:' + frontendPort;
+    const redirect = await fetch(base + legacy + '?ref=PARTNER', { redirect: 'manual' });
+    assert.equal(redirect.status, 308);
+    assert.equal(redirect.headers.get('location'), legacy.slice(0, -5) + '?ref=PARTNER');
+    assert.equal((await fetch(base + redirect.headers.get('location'))).status, 200);
+  }
+  const directory = await fetch('http://127.0.0.1:' + frontendPort + '/affiliate', { redirect: 'manual' });
+  assert.equal(directory.status, 301);
+  assert.equal(directory.headers.get('location'), '/affiliate/');
   assert.equal(otpResponse.status, 200);
   assert.deepEqual(await otpResponse.json(), {
     method: 'POST', path: '/api/auth/request-otp', body, authorization: 'Bearer test-token',
   });
+});
+
+
+test('all legacy HTML pages redirect to clean URLs and preserve query parameters', async t => {
+  const base = await site(t);
+  for (const [folder, prefix] of [['frontend', '/'], ['admin', '/admin/'], ['frontend', '/frontend/']]) {
+    for (const file of fs.readdirSync(path.join(root, folder), { recursive: true }).filter(file => file.endsWith('.html'))) {
+      const legacy = prefix + file.replaceAll('\\', '/');
+      const query = '?ref=PARTNER&search=blocks%20%26%20games&next=cart.html';
+      const clean = legacy.slice(0, -5) + query;
+      for (const method of ['GET', 'HEAD']) {
+        const redirect = await fetch(base + legacy + query, { method, redirect: 'manual' });
+        assert.equal(redirect.status, 308, legacy);
+        assert.equal(redirect.headers.get('location'), clean);
+        const response = await fetch(base + clean, { method, redirect: 'manual' });
+        assert.equal(response.status, 200, clean);
+        assert.match(response.headers.get('content-type'), /text\/html/);
+        assert.equal(response.headers.get('cache-control'), 'no-store');
+        await response.arrayBuffer();
+      }
+    }
+  }
+  assert.equal((await fetch(base + '/nonexistent-page')).status, 404);
+  const api = await fetch(base + '/api/missing.html', { redirect: 'manual' });
+  assert.equal(api.status, 404);
+  assert.equal(api.headers.get('location'), null);
 });

@@ -26,7 +26,7 @@
 
   function requireAuth() {
     if (!getToken() && !isLoginPage()) {
-      window.location.href = 'login.html';
+      window.location.href = 'login';
       return false;
     }
     return true;
@@ -34,7 +34,7 @@
 
   function redirectIfAuthenticated() {
     if (getToken() && isLoginPage()) {
-      window.location.href = 'dashboard.html';
+      window.location.href = 'dashboard';
     }
   }
 
@@ -50,7 +50,7 @@
         }
       } catch { showToast('Unable to sign out. Check your connection and retry.', 'error'); return; }
       clearToken();
-      window.location.href = 'login.html';
+      window.location.href = 'login';
     });
   }
 
@@ -120,7 +120,7 @@
 
     if (res.status === 401 || res.status === 403) {
       clearToken();
-      window.location.href = 'login.html';
+      window.location.href = 'login';
       throw new Error('Session expired');
     }
 

@@ -13,6 +13,17 @@ function mountFrontend(app, { root = path.resolve(__dirname, '..') } = {}) {
   }
   // Mount after API routes. An unknown API URL must never return a frontend page.
   app.use('/api', (req, res) => res.status(404).json({ error: 'API route not found' }));
+  // Redirect browser URLs only; static middleware still reads .html files.
+  // Keep query strings intact (search, affiliate attribution and checkout).
+  app.use((req, res, next) => {
+    if (!['GET', 'HEAD'].includes(req.method)) return next();
+    const [pathname] = req.originalUrl.split('?');
+    if (!pathname.endsWith('.html')) return next();
+    const target = pathname.slice(0, -5) + req.originalUrl.slice(pathname.length);
+    // A relative Location must never become a protocol-relative external URL.
+    if (target.startsWith('//') || target.includes('\\')) return res.sendStatus(400);
+    res.redirect(308, target);
+  });
   const options = {
     dotfiles: 'deny', extensions: ['html'], maxAge: 0,
     setHeaders(res, file) {
@@ -27,4 +38,10 @@ function mountFrontend(app, { root = path.resolve(__dirname, '..') } = {}) {
   app.use(express.static(frontend, options));
 }
 
-module.exports = { mountFrontend };
+function createFrontendHandler() {
+  const app = express();
+  mountFrontend(app);
+  return app;
+}
+
+module.exports = { mountFrontend, createFrontendHandler };

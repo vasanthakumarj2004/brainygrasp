@@ -101,7 +101,7 @@ function renderSummary() {
       <div class="empty-cart">
         <i class="fas fa-shopping-bag"></i>
         <p>Your cart is empty.</p>
-        <a href="index.html" style="color:var(--primary);font-weight:700">Continue Shopping</a>
+        <a href="index" style="color:var(--primary);font-weight:700">Continue Shopping</a>
       </div>`;
     document.getElementById('btnPlaceOrder').disabled = true;
     return false;
@@ -229,8 +229,8 @@ async function prefillProfile(token) {
         localStorage.removeItem('bg_token');
         localStorage.removeItem('bg_user');
       }
-      localStorage.setItem('redirectAfterLogin', 'checkout_cod.html');
-      window.location.href = 'login.html';
+      localStorage.setItem('redirectAfterLogin', 'checkout_cod');
+      window.location.href = 'login';
       return false;
     }
     if (!res.ok) throw Object.assign(new Error('Profile could not load'), { status: res.status });
@@ -419,7 +419,7 @@ function showSuccess(orderId, payNote) {
   requestAnimationFrame(() => {
     document.getElementById('redirectFill').style.width = '100%';
   });
-  setTimeout(() => window.location.href = 'dashboard-new.html', 3200);
+  setTimeout(() => window.location.href = 'dashboard-new', 3200);
 }
 
 // ── Payment Method UI Toggle ───────────────────────────────────
@@ -558,8 +558,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 1. Auth gate
   const token = localStorage.getItem('bg_token');
   if (!token) {
-    localStorage.setItem('redirectAfterLogin', 'checkout_cod.html');
-    window.location.href = 'login.html';
+    localStorage.setItem('redirectAfterLogin', 'checkout_cod');
+    window.location.href = 'login';
     return;
   }
 
