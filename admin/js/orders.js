@@ -124,7 +124,7 @@
       const shipStatus = o.tracking_status || o.status || 'Placed';
       const awb = o.awb_number || '—';
       const courier = o.courier_name || '—';
-      const payMode = (o.payment_method || 'COD').toUpperCase();
+      const payMode = o.payment_review ? 'PAYMENT REVIEW / REFUND' : (o.payment_method || 'COD').toUpperCase();
 
       const actionBtn = `<button class="btn-push-shipment" data-id="${o.id}" type="button">Shipping details</button>`;
 
@@ -185,6 +185,7 @@
         ? [savedAddress.full_name, savedAddress.line1, savedAddress.line2, savedAddress.city, savedAddress.state, savedAddress.pincode].filter(Boolean).join(', ')
         : [o.addr_name, o.line1, o.city, o.state, o.pincode].filter(Boolean).join(', ');
       document.getElementById('modalInfo').innerHTML = `
+        ${o.payment_review ? `<div class="info-block" style="grid-column:1/-1" role="alert"><label>Captured payment needs review</label><span>Payment ${esc(o.payment_review.payment_id)}: ${fmtRupee(o.payment_review.amount_paise / 100)} ${esc(o.payment_review.currency)}. This order was cancelled and must not be dispatched. Check this payment in the Razorpay dashboard and its existing refund status before issuing any refund. No automatic refund was issued. Record the refund reference in the admin note.</span></div>` : ''}
         <div class="info-block"><label>Customer</label><span>${esc(o.customer_name || 'Guest')}</span></div>
         <div class="info-block"><label>Email</label><span>${esc(o.customer_email || '—')}</span></div>
         <div class="info-block"><label>Phone</label><span>${esc(savedAddress?.phone || o.addr_phone || '—')}</span></div>
@@ -198,9 +199,28 @@
         ${o.admin_note ? `<div class="info-block" style="grid-column:1/-1"><label>Admin Note</label><span>${esc(o.admin_note)}</span></div>` : ''}
       `;
 
+      if (o.payment_method === 'cod' && o.status === 'Delivered') {
+        const info = document.getElementById('modalInfo');
+        if (o.cod_collected_at) {
+          info.insertAdjacentHTML('beforeend', '<div class="info-block"><label>COD collection</label><span>Funds collected</span></div>');
+        } else {
+          info.insertAdjacentHTML('beforeend', '<div class="info-block"><label>COD commission held</label><button type="button" id="confirmCodCollection">Confirm COD funds collected</button></div>');
+          document.getElementById('confirmCodCollection').addEventListener('click', async event => {
+            if (!window.confirm('Confirm only after verifying that the COD funds were collected. This releases the affiliate commission.')) return;
+            const button = event.currentTarget; button.disabled = true;
+            try {
+              const response = await adminFetch(`/admin/orders/${o.id}/confirm-cod-collection`, { method: 'POST', body: JSON.stringify({ collected: true }) });
+              const result = await response.json();
+              if (!response.ok) throw new Error(result.error || 'Unable to confirm collection');
+              await openModal(o.id);
+            } catch (error) { showToast(error.message, 'error'); button.disabled = false; }
+          });
+        }
+      }
       const shipmentEl = document.getElementById('modalShipment');
       const details = o.shipping_job_details || {};
       const parcel = details.parcel || o.shipping_snapshot?.parcel;
+      const packing = details.packing || o.shipping_snapshot?.packing;
       const active = ['queued', 'processing', 'retry'].includes(o.shipping_job_state);
       const canBook = !active && o.shipping_job_state !== 'completed' &&
         !['Payment Pending', 'Cancelled', 'RTO'].includes(o.status) && (o.payment_method === 'cod' || Boolean(o.payment_verified_at));
@@ -209,7 +229,12 @@
         <p>AWB: ${esc(o.awb_number || 'Pending')} | Courier: ${esc(o.courier_name || 'Pending')}</p>
         ${o.shipping_job_error ? `<p role="alert" style="color:#b91c1c">${esc(o.shipping_job_error)}</p>` : ''}
         ${parcel ? `<p>Parcel: ${esc(parcel.weight)} kg | ${esc(parcel.length)} x ${esc(parcel.breadth)} x ${esc(parcel.height)} cm | Box: ${esc(details.packageCode || o.shipping_snapshot?.packageCode || 'Manual')}</p>` : ''}
-        ${details.packing?.stackCm ? `<p>Pack in one stack: ${esc(details.packing.stackCm.length)} x ${esc(details.packing.stackCm.breadth)} x ${esc(details.packing.stackCm.height)} cm before the outer box.</p>` : ''}
+        ${packing?.stackCm ? `<p>Pack in one stack: ${esc(packing.stackCm.length)} x ${esc(packing.stackCm.breadth)} x ${esc(packing.stackCm.height)} cm before the outer box.</p>` : ''}
+        ${packing?.placements?.length ? `<details><summary>Packing layout (${esc(packing.placements.length)} units)</summary>
+          <p>All measurements are in cm, from the same inside corner of the box. X follows length, Y follows breadth, Z is height from the bottom. Orient each wrapped unit to the listed size.</p>
+          <div style="max-height:300px;overflow:auto"><table><thead><tr><th>Product / unit</th><th>Position X, Y, Z</th><th>Length × breadth × height</th></tr></thead><tbody>
+          ${packing.placements.map(p => `<tr><td>${esc(o.items?.[p.itemIndex]?.name || 'Product')} / ${esc(p.unit)}</td><td>${esc(p.x)}, ${esc(p.y)}, ${esc(p.z)}</td><td>${esc(p.length)} × ${esc(p.breadth)} × ${esc(p.height)}</td></tr>`).join('')}
+          </tbody></table></div></details>` : ''}
         <p>${documentLink(details.labelUrl, 'Download label')} ${documentLink(details.manifestUrl, 'Download manifest')}</p>
         ${!parcel && canBook ? `<p>Enter the measured final parcel:</p><div style="display:flex;gap:8px;flex-wrap:wrap">${['weight','length','breadth','height'].map(key => `<label>${key === 'weight' ? 'Weight (kg)' : key + ' (cm)'}<input id="parcel_${key}" type="number" min="${key === 'weight' ? '0.001' : '0.51'}" max="${key === 'weight' ? 100 : 300}" step="0.01" style="width:90px;display:block"></label>`).join('')}</div>` : ''}
         ${canBook ? '<p><button type="button" id="resumeBooking">Queue / resume shipment</button></p>' : ''}

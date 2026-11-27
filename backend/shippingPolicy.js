@@ -21,6 +21,7 @@ function shippingConfig(env) {
 }
 
 function eligibleOrder(order) {
+  if (order?.payment_review) throw new ShippingError('payment_review', 'Payment review orders must not be dispatched.');
   if (!order || !['Placed', 'Paid', 'Confirmed'].includes(order.status)) throw new ShippingError('order_status', 'This order is not eligible for shipment booking.');
   if (order.payment_method === 'razorpay') {
     if (!order.payment_verified_at || !order.payment_id || !order.razorpay_order_id || !order.razorpay_key_id?.startsWith('rzp_live_')) {
@@ -78,9 +79,16 @@ function nextTrackingStatus(current, incoming) {
 }
 function eventTime(value) {
   if (!value || typeof value !== 'string') return null;
-  const match = value.match(/^(\d{2}) (\d{2}) (\d{4}) (\d{2}:\d{2}:\d{2})$/);
-  const iso = match ? `${match[3]}-${match[2]}-${match[1]}T${match[4]}+05:30` : value;
-  if (!/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(iso)) return null;
+  const input = value.trim();
+  const webhook = input.match(/^(\d{2}) (\d{2}) (\d{4}) (\d{2}:\d{2}:\d{2})$/);
+  const local = input.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?)$/);
+  // Shiprocket's timezone-less webhook/scan dates use Indian local time.
+  const iso = webhook ? `${webhook[3]}-${webhook[2]}-${webhook[1]}T${webhook[4]}+05:30` :
+    local ? `${local[1]}T${local[2]}+05:30` : input;
+  const parts = iso.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/);
+  if (!parts || Number(parts[2]) > 23 || Number(parts[3]) > 59 || Number(parts[4]) > 59) return null;
+  const day = new Date(parts[1] + 'T00:00:00Z');
+  if (!Number.isFinite(day.getTime()) || day.toISOString().slice(0, 10) !== parts[1]) return null;
   const time = new Date(iso);
   return Number.isFinite(time.getTime()) ? time.toISOString() : null;
 }

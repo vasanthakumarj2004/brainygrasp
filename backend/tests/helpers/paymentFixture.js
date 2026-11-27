@@ -9,7 +9,7 @@ const request = () => ({ checkout_key: crypto.randomUUID(), address_id: 10, item
 
 // In-memory transactional adapter; no live credentials, DB, email, or gateway calls.
 function fixture({ environment = env, shippingClient } = {}) {
-  const state = { orders: [], jobs: [], cart: [{ id: 1, quantity: 2 }], commissions: 0, walletCredits: 0, cartWrites: 0,
+  const state = { orders: [], jobs: [], cart: [{ id: 1, quantity: 2 }], commissions: 0, commissionStatuses: [], walletCredits: 0, cartWrites: 0,
     products: [1, 2].map(id => ({ id, name: `Catalog Toy${id === 1 ? '' : ' 2'}`, price: 500, image: 'toy.png',
       shipping_weight_g: 300, shipping_length_cm: 10, shipping_breadth_cm: 8, shipping_height_cm: 4 })) };
   const effects = [];
@@ -44,6 +44,10 @@ function fixture({ environment = env, shippingClient } = {}) {
     if (q.startsWith('UPDATE orders SET razorpay_order_id')) {
       const o = state.orders.find(o => o.id === args[1]); o.razorpay_order_id = args[0]; return rows([o]);
     }
+    if (q.startsWith('UPDATE orders SET payment_id=$1, payment_review')) {
+      const o = state.orders.find(o => o.id === args[2]);
+      Object.assign(o, { payment_id: args[0], payment_review: JSON.parse(args[1]) }); return rows([o]);
+    }
     if (q.startsWith("UPDATE orders SET status = 'Cancelled'")) {
       state.orders.find(o => o.id === args[0]).status = 'Cancelled'; return rows([]);
     }
@@ -52,7 +56,7 @@ function fixture({ environment = env, shippingClient } = {}) {
       if (state.orders.some(other => other.id !== o.id && other.payment_id === args[0])) throw Object.assign(new Error('duplicate payment'), { code: '23505' });
       Object.assign(o, { status: 'Paid', payment_id: args[0], payment_verified_at: '2026-11-11T00:00:00Z' }); return rows([o]);
     }
-    if (q.startsWith('INSERT INTO commissions')) { state.commissions++; return rows([{ id: state.commissions }]); }
+    if (q.startsWith('INSERT INTO commissions')) { state.commissions++; state.commissionStatuses.push(args[5]); return rows([{ id: state.commissions }]); }
     if (q.startsWith('INSERT INTO affiliate_wallets')) { state.walletCredits++; return rows([]); }
     if (q.startsWith('INSERT INTO wallet_transactions')) return rows([]);
     if (q.startsWith('INSERT INTO shipping_jobs')) {

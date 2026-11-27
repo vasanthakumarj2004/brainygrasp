@@ -40,6 +40,11 @@ function createDeliveryTracking({ pool, invalidate = async () => {} }) {
     // Courier exceptions and future statuses are useful even when they do not
     // advance a delivery stage. Store the raw status without inventing progress.
     const status = nextTrackingStatus(order.status, mapped) || order.status;
+    // Reject regressions for both the order stage AND the displayed raw status.
+    if (mapped && mapped !== order.status && status === order.status) return order;
+    // Without a timestamp, only a clear forward transition can supersede a
+    // dated observation. Unknown/same-stage snapshots cannot erase exceptions.
+    if (!event.eventAt && order.tracking_event_at && status === order.status) return order;
     const deliveredDate = mapped === 'Delivered' && event.eventAt
       ? new Date(new Date(event.eventAt).getTime() + 330 * 60000).toISOString().slice(0, 10) : null;
     const result = await db.query(`UPDATE orders SET status=$2, tracking_status=$3,

@@ -42,3 +42,4 @@ router.webhook = async (req, res) => {
   catch (err) { sendError(res, err); }
 };
 module.exports = router;
+module.exports.paymentService = service;

@@ -6,6 +6,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { createTrackingReconciliation } = require('../trackingReconciliation');
 const { createDeliveryTracking } = require('../deliveryTracking');
+const { createShiprocketClient } = require('../shiprocketService');
+const { environment } = require('./helpers/shippingFixture');
 
 function fixture(initial = [{ id: 1, status: 'Shipped' }]) {
   let now = 0;
@@ -51,6 +53,64 @@ test('a missed final webhook is recovered and terminal shipments stop polling', 
   assert.deepEqual(f.invalidated, [9]);
   f.advance(60 * 60000); await f.run();
   assert.deepEqual(f.calls, ['AWB1']);
+});
+
+function trackingAdapter(response) {
+  return createShiprocketClient({ env: environment, fetchImpl: async url => ({ ok: true,
+    json: async () => url.endsWith('/auth/login') ? { token: 'fixture' } : response }) });
+}
+
+test('real tracking response shape saves the delivery date when the final webhook is missed', async () => {
+  const f = fixture([{ id: 1, status: 'Shipped', tracking_event_at: '2026-11-19T12:00:00Z' }]);
+  const client = trackingAdapter({ tracking_data: { shipment_status: 7,
+    shipment_track: [{ current_status: 'Delivered', delivered_date: '2026-11-20 00:15:00',
+      updated_at: '2026-11-21 10:00:00', edd: '2026-11-20 23:59:00' }],
+    shipment_track_activities: [{ date: '2026-11-20 00:16:00', 'sr-status': '7' }] } });
+  f.respond(awb => client.getTracking(awb)); await f.run();
+  assert.equal(f.orders[0].status, 'Delivered');
+  assert.equal(f.orders[0].delivery_date, '2026-11-20');
+  assert.equal(f.orders[0].tracking_event_at, '2026-11-19T18:45:00.000Z');
+  assert.equal(f.orders[0].estimated_delivery, '2026-11-20');
+});
+
+test('polling recovers a missed exception from matching scan dates and ignores stale snapshots', async () => {
+  const f = fixture([{ id: 1, status: 'Shipped', tracking_status: 'IN TRANSIT', tracking_event_at: '2026-11-20T04:30:00Z' }]);
+  const response = { tracking_data: { shipment_status: 21,
+    shipment_track: [{ current_status: 'Undelivered' }], shipment_track_activities: [
+      { date: '2026-11-21 12:00:00', 'sr-status': '18', 'sr-status-label': 'IN TRANSIT' },
+      { date: '2026-11-20 11:00:00', 'sr-status': '21' },
+      { date: '2026-11-20 09:00:00', 'sr-status-label': 'UNDELIVERED' }
+    ] } };
+  const client = trackingAdapter(response);
+  f.respond(awb => client.getTracking(awb)); await f.run();
+  assert.equal(f.orders[0].tracking_status, 'Undelivered');
+  assert.equal(f.orders[0].tracking_event_at, '2026-11-20T05:30:00.000Z');
+  assert.equal(f.orders[0].status, 'Shipped');
+  // A later unrelated activity cannot make an older IN TRANSIT snapshot new.
+  response.tracking_data.shipment_status = 18;
+  response.tracking_data.shipment_track[0].current_status = 'IN TRANSIT';
+  response.tracking_data.shipment_track_activities = [
+    { date: '2026-11-20 09:00:00', 'sr-status': '18' },
+    { date: '2026-11-21 12:00:00', 'sr-status': '21', 'sr-status-label': 'UNDELIVERED' }
+  ];
+  f.advance(15 * 60000); await f.run();
+  assert.equal(f.orders[0].tracking_status, 'Undelivered');
+  assert.equal(f.orders[0].tracking_event_at, '2026-11-20T05:30:00.000Z');
+});
+
+test('tracking timestamp fallbacks reject invalid dates and never borrow another status scan', async () => {
+  const response = { tracking_data: { shipment_status: 7, shipment_track: [{ current_status: 'Delivered', delivered_date: '0000-00-00 00:00:00' }],
+    shipment_track_activities: [
+      { date: '2026-11-20 11:00:00', 'sr-status-label': 'DELIVERED' },
+      { date: '2026-02-30 11:00:00', 'sr-status': '7' },
+      { date: '2026-11-21 12:00:00', 'sr-status-label': 'IN TRANSIT' }
+    ] } };
+  const client = trackingAdapter(response);
+  assert.equal((await client.getTracking('AWB1')).eventAt, '2026-11-20T05:30:00.000Z');
+  response.tracking_data.shipment_track_activities = [{ date: '2026-11-21 12:00:00', 'sr-status': '18' }];
+  assert.equal((await client.getTracking('AWB1')).eventAt, null);
+  response.tracking_data.shipment_track[0].updated_at = '2026-11-20T06:00:00Z';
+  assert.equal((await client.getTracking('AWB1')).eventAt, '2026-11-20T06:00:00.000Z');
 });
 
 test('failed tracking reads retry after the persisted delay without starving other orders', async () => {

@@ -12,6 +12,7 @@ const root = path.resolve(__dirname, '../../..');
 const environment = { JWT_SECRET: 'catalog-test-secret', ADMIN_USERNAME: 'catalog-review', ADMIN_PASSWORD: 'local-review-only' };
 
 function createCatalogFixture(initial = []) {
+  const auth = require('./authFixture').authFixture(environment);
   const rows = structuredClone(initial), invalidations = [];
   let nextId = Math.max(0, ...rows.map(row => row.id)) + 1;
   const state = { rows, invalidations, unavailable: false };
@@ -47,7 +48,7 @@ function createCatalogFixture(initial = []) {
     clearCachePattern: async pattern => { invalidations.push(pattern); }, deleteCache: async () => {}, CACHE_KEYS: {} };
   function load(relative) {
     const filename = path.join(root, 'backend', relative), requireLocal = createRequire(filename), module = { exports: {} };
-    const mocks = { '../db': pool, '../redisClient': cache, '../shiprocketService': {}, '../shippingJobs': {}, '../orderFulfillment': {} };
+    const mocks = { '../authSecurity': { security: () => auth.security }, '../db': pool, '../redisClient': cache, '../shiprocketService': {}, '../shippingJobs': {}, '../orderFulfillment': {} };
     vm.runInNewContext(fs.readFileSync(filename, 'utf8'), { module, exports: module.exports, Buffer, console,
       process: { env: environment }, require: name => Object.hasOwn(mocks, name) ? mocks[name] : requireLocal(name) }, { filename });
     return module.exports;
@@ -60,7 +61,7 @@ function createCatalogFixture(initial = []) {
   app.get('/admin/js/config.js', (req,res) => res.type('js').send('window.BG_ADMIN_CONFIG={API_BASE:""};'));
   app.use('/admin', express.static(path.join(root, 'admin')));
   app.use(express.static(path.join(root, 'frontend')));
-  return { app, state, token: jwt.sign({ role: 'admin', username: environment.ADMIN_USERNAME }, environment.JWT_SECRET), environment };
+  return { app, state, token: auth.token({ role: 'admin', username: environment.ADMIN_USERNAME }), environment };
 }
 module.exports = { createCatalogFixture };
 

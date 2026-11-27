@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { ShippingError } = require('./shippingPolicy');
 const { confirmationJob } = require('./shippingCheckout');
+const { payable, credit } = require('./commissionSecurity');
 const { normalizePhone } = require('../frontend/js/customer-validation');
 
 class CheckoutError extends Error {
@@ -120,14 +121,11 @@ async function confirmEffects(db, order) {
       if (!Number.isFinite(pct) || pct < 0 || pct > 100) throw new Error('Invalid affiliate commission configuration');
       const amount = Math.round(order.total * pct / 100);
       const result = await db.query(`INSERT INTO commissions (affiliate_id, order_id, order_amount, commission_pct, commission_amount, status)
-        VALUES ($1, $2, $3, $4, $5, 'APPROVED') ON CONFLICT (order_id) DO NOTHING RETURNING id`,
-      [order.affiliate_id, order.id, order.total, pct, amount]);
-      if (result.rows.length) {
-        await db.query(`INSERT INTO affiliate_wallets (affiliate_id, current_balance, total_earned) VALUES ($1, $2, $2)
-          ON CONFLICT (affiliate_id) DO UPDATE SET current_balance = affiliate_wallets.current_balance + $2,
-          total_earned = affiliate_wallets.total_earned + $2, updated_at = NOW()`, [order.affiliate_id, amount]);
-        await db.query(`INSERT INTO wallet_transactions (affiliate_id, transaction_type, amount, description, reference_id)
-          VALUES ($1, 'COMMISSION', $2, $3, $4)`, [order.affiliate_id, amount, `Commission from Order #${order.id}`, result.rows[0].id]);
+        VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (order_id) DO NOTHING RETURNING id`,
+      [order.affiliate_id, order.id, order.total, pct, amount, payable(order) ? 'APPROVED' : 'PENDING']);
+      if (result.rows.length && payable(order)) {
+        await credit(db, { id: result.rows[0].id, affiliate_id: order.affiliate_id,
+          order_id: order.id, commission_amount: amount });
       }
     }
   }

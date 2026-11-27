@@ -80,7 +80,8 @@ test('concurrent callbacks and webhook confirm once with one commission and ship
   f.state.cart = [{ id: 1, quantity: 3 }, { id: 2, quantity: 1 }];
   await Promise.all([f.service.verify(1, f.callback()), f.service.webhook(...f.webhook()), f.service.verify(1, f.callback())]);
   assert.equal(f.state.orders[0].status, 'Paid'); assert.equal(f.state.cartWrites, 1);
-  assert.equal(f.state.commissions, 1); assert.equal(f.state.walletCredits, 1); assert.deepEqual(f.effects, [1]);
+  assert.equal(f.state.commissions, 1); assert.equal(f.state.walletCredits, 0); // Test captures never create withdrawable credits.
+  assert.deepEqual(f.effects, [1]);
   assert.deepEqual(f.state.cart, [{ id: 1, quantity: 1 }, { id: 2, quantity: 1 }]);
 });
 
@@ -167,8 +168,12 @@ test('late capture for a cancelled order cannot fulfill it or its replacement', 
   const f = fixture(); const old = await f.service.create(1, request());
   f.state.cart[0].quantity = 3; await f.service.status(1, old.id);
   await f.service.create(1, request()); f.setPayment({ amount: old.amount });
-  await assert.rejects(f.service.verify(1, f.callback(old.id)), { status: 409 });
-  await assert.rejects(f.service.webhook(...f.webhook()), { status: 409 });
+  const result = await f.service.verify(1, f.callback(old.id));
+  assert.equal(result.review_required, true); assert.equal(result.paid, false); assert.equal(result.resumable, false);
+  await Promise.all([f.service.webhook(...f.webhook()), f.service.verify(1, f.callback(old.id))]);
+  assert.equal(f.state.orders[0].payment_review.state, 'needs_review');
+  assert.equal(f.state.orders[0].payment_id, 'pay_fixture');
+  assert.equal((await f.service.status(1, old.id)).review_required, true);
   assert.deepEqual(f.state.orders.map(o => o.status), ['Cancelled', 'Payment Pending']);
   assert.equal(f.state.cartWrites, 0); assert.equal(f.state.jobs.length, 0); assert.equal(f.effects.length, 0);
 });
@@ -178,6 +183,31 @@ test('gateway failure leaves a changed order pending and cannot authorize stale 
   f.state.cart[0].quantity = 3; f.calls.failFetch = true;
   await assert.rejects(f.service.status(1, old.id));
   assert.equal(f.state.orders[0].status, 'Payment Pending'); assert.equal(f.calls.create, 1);
+});
+
+test('background reconciliation recovers capture once without a customer callback', async () => {
+  const f = fixture(); const o = await f.service.create(1, request());
+  f.setPayments([{ id: 'pay_fixture', order_id: o.orderId, amount: o.amount, currency: 'INR', status: 'captured', captured: true, amount_refunded: 0 }]);
+  await Promise.all([f.service.reconcile(1, o.id), f.service.reconcile(1, o.id)]);
+  assert.equal(f.state.orders[0].status, 'Paid'); assert.equal(f.state.cartWrites, 1);
+  assert.equal(f.state.jobs.length, 1); assert.equal(f.calls.create, 1);
+});
+
+test('background checks do not cancel changed carts or create new gateway orders', async () => {
+  const f = fixture(); const o = await f.service.create(1, request());
+  f.state.cart[0].quantity = 3; await f.service.reconcile(1, o.id);
+  assert.equal(f.state.orders[0].status, 'Payment Pending'); assert.equal(f.calls.create, 1);
+  const g = fixture(); g.calls.failCreate = true;
+  await assert.rejects(g.service.create(1, request()));
+  g.calls.failCreate = false; await g.service.reconcile(1, 1);
+  assert.equal(g.calls.create, 1); assert.ok(!g.state.orders[0].razorpay_order_id);
+});
+
+test('background checks recover a lost gateway creation response by receipt', async () => {
+  const f = fixture(); f.calls.loseCreateResponse = true;
+  await assert.rejects(f.service.create(1, request()));
+  await f.service.reconcile(1, 1);
+  assert.equal(f.state.orders[0].razorpay_order_id, 'order_fixture1'); assert.equal(f.calls.create, 1);
 });
 
 test('confirmation rolls back on DB failure and retries safely', async () => {

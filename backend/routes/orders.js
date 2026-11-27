@@ -14,6 +14,7 @@
 const express   = require('express');
 const router    = express.Router();
 const pool      = require('../db');
+const { customerOrder } = require('../customerOrder');
 const { getCached, setCache, deleteCache, CACHE_KEYS, TTL } = require('../redisClient');
 const { authenticateToken } = require('../middleware/auth');
 const { CheckoutError, checkoutIdentity, validateAddress, quote, ownedAddress, affiliate, confirmEffects, sendError } = require('../checkoutService');
@@ -93,11 +94,14 @@ router.get('/api/orders', authenticateToken, async (req, res) => {
     const fresh = req.query.fresh === '1';
     const cachedOrders = fresh ? null : await getCached(CACHE_KEYS.USER_ORDERS(req.user.id));
     if (cachedOrders) {
-      return res.json(cachedOrders);
+      return res.json(cachedOrders.map(customerOrder));
     }
 
     const result = await pool.query(`
-      SELECT o.*,
+      SELECT o.id, o.status, o.total, o.subtotal, o.shipping, o.discount, o.promo_code, o.items,
+             o.payment_method, o.payment_id, o.payment_verified_at, o.razorpay_key_id, o.created_at,
+             o.expected_delivery, o.delivery_date, o.tracking_status, o.tracking_event_at, o.estimated_delivery,
+             o.courier_name, o.awb_number, (o.payment_review IS NOT NULL) AS payment_review,
              a.full_name, a.line1, a.line2,
              a.city,      a.state, a.pincode,
              CASE WHEN sj.order_id IS NULL THEN NULL ELSE jsonb_build_object(
@@ -112,8 +116,9 @@ router.get('/api/orders', authenticateToken, async (req, res) => {
       ORDER BY o.created_at DESC
     `, [req.user.id]);
 
-    if (!fresh) await setCache(CACHE_KEYS.USER_ORDERS(req.user.id), result.rows, TTL.USER_ORDERS);
-    res.json(result.rows);
+    const orders = result.rows.map(customerOrder);
+    if (!fresh) await setCache(CACHE_KEYS.USER_ORDERS(req.user.id), orders, TTL.USER_ORDERS);
+    res.json(orders);
   } catch (err) {
     console.error('Orders fetch error:', err);
     res.status(500).json({ error: 'Failed to fetch orders' });

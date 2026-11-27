@@ -1168,7 +1168,7 @@ function syncAuthHeader() {
 
       <i class="fas fa-user-check" style="color:#FF6B35"></i>
 
-      <span class="user-name-label">${firstName}</span>
+      <span class="user-name-label">${escapeHTML(firstName)}</span>
 
     `;
 

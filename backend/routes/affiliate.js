@@ -30,38 +30,18 @@
 
 const express  = require('express');
 const router   = express.Router();
-const jwt      = require('jsonwebtoken');
 const bcrypt   = require('bcryptjs');
 const pool     = require('../db'); // shared pool — no duplicate connections
 
-const SECRET_KEY = process.env.JWT_SECRET;
 
 // ── Auth Middleware: Affiliate Partner ──────────────────────────────────────
 function authenticateAffiliate(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Affiliate access denied' });
-  jwt.verify(token, SECRET_KEY, (err, decoded) => {
-    if (err || decoded.role !== 'affiliate') {
-      return res.status(403).json({ error: 'Affiliate access required' });
-    }
-    req.affiliate = decoded;
-    next();
-  });
+  return require('../authSecurity').security().authenticate('affiliate')(req, res, next);
 }
 
 // ── Auth Middleware: Admin ───────────────────────────────────────────────────
 function authenticateAdmin(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Admin access denied' });
-  jwt.verify(token, SECRET_KEY, (err, decoded) => {
-    if (err || decoded.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-    req.admin = decoded;
-    next();
-  });
+  return require('../authSecurity').security().authenticate('admin')(req, res, next);
 }
 
 // ── Helper: Calculate next payout date & remaining days ─────────────────────
@@ -126,10 +106,12 @@ router.get('/api/affiliate/track', async (req, res) => {
 
 // 2. Affiliate Login
 router.post('/api/affiliate/login', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
+  const { email, password } = req.body || {};
+  if (typeof email !== 'string' || email.length > 254 || typeof password !== 'string' || password.length > 1024) return res.status(400).json({ error: 'Email and password are required' });
 
   try {
+    const security = require('../authSecurity').security();
+    await security.throttle(req, 'affiliate-login', email.trim().toLowerCase());
     const userRes = await pool.query("SELECT * FROM users WHERE email=$1 AND role='AFFILIATE'", [email.trim().toLowerCase()]);
     if (userRes.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid affiliate credentials' });
@@ -155,12 +137,13 @@ router.post('/api/affiliate/login', async (req, res) => {
       return res.status(403).json({ error: 'Account is inactive. Contact admin.' });
     }
 
-    const token = jwt.sign({
+    const token = await security.issue({
       id: user.id,
       affiliate_id: aff.id,
       affiliate_code: aff.affiliate_code,
       role: 'affiliate'
-    }, SECRET_KEY, { expiresIn: '7d' });
+    }, security.digest(user.password_hash));
+    res.set('Cache-Control', 'no-store');
 
     res.json({
       token,
@@ -174,8 +157,7 @@ router.post('/api/affiliate/login', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('Affiliate login error:', err);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(err.status === 429 ? 429 : 503).json({ error: err.status === 429 ? err.message : 'Login failed' });
   }
 });
 
@@ -395,6 +377,9 @@ router.put('/api/admin/affiliates/:id', authenticateAdmin, async (req, res) => {
       `, [commission_pct !== undefined ? parseFloat(commission_pct) : null, status || null, affId]);
     }
 
+    if (status !== undefined && status !== 'ACTIVE') {
+      await pool.query("DELETE FROM auth_sessions WHERE user_id=$1 AND role='affiliate'", [userId]);
+    }
     res.json({ success: true, message: 'Affiliate updated successfully' });
   } catch (err) {
     console.error('Admin update affiliate error:', err);
@@ -447,6 +432,16 @@ router.post('/api/admin/affiliate-payouts/:affiliateId', authenticateAdmin, asyn
     if (currentBalance <= 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Wallet balance is ₹0. Nothing to payout.' });
+    }
+
+    // Defense in depth: legacy or subsequently invalidated credits cannot be paid out.
+    const eligible = await client.query(`SELECT c.commission_amount, o.* FROM commissions c
+      JOIN orders o ON o.id=c.order_id WHERE c.affiliate_id=$1 AND c.status='APPROVED'`, [affId]);
+    const { payable } = require('../commissionSecurity');
+    if (eligible.rows.some(order => !payable(order)) ||
+        eligible.rows.reduce((sum, order) => sum + Number(order.commission_amount), 0) !== currentBalance) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Wallet requires review: only collected live payments are eligible for payout.' });
     }
 
     // 1. Create payout record

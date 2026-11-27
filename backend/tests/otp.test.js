@@ -77,7 +77,9 @@ test('unsupported OTP channels do not report success', async () => {
 
 test('OTP API reports an email error on SMTP failure and success only on acceptance', async t => {
   let sent = false;
+  const sessions = require('./helpers/authFixture').authFixture();
   const router = load('routes/auth.js', {
+    '../authSecurity': { security: () => sessions.security },
     '../db': { query: async () => ({ rows: [] }) },
     '../otpService': { sendOTP: async () => sent },
     '../redisClient': { setCache: async () => {}, CACHE_KEYS: { OTP: email => email }, TTL: { OTP: 600 } },

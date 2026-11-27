@@ -24,7 +24,8 @@ function load(relative, dependencies, environment = {}) {
 
 async function api(t, shippingOptions = { env: { SHIPROCKET_ENABLED: 'false' } }) {
   const f = fixture();
-  const auth = load('middleware/auth.js', {}, { JWT_SECRET: 'local-test-jwt-secret' });
+  const sessions = require('./helpers/authFixture').authFixture({ JWT_SECRET: 'local-test-jwt-secret' });
+  const auth = load('middleware/auth.js', { '../authSecurity': { security: () => sessions.security } });
   const cache = { getCached: async () => null, setCache: async () => {}, deleteCache: async () => {}, CACHE_KEYS: { USER_CART: id => id, USER_ORDERS: id => id } };
   const common = { '../db': f.pool, '../middleware/auth': auth, '../redisClient': cache,
     '../orderFulfillment': { afterConfirmation() {}, invalidateOrderCache: async () => {} },
@@ -40,7 +41,7 @@ async function api(t, shippingOptions = { env: { SHIPROCKET_ENABLED: 'false' } }
   const base = `http://127.0.0.1:${server.address().port}`;
   async function send(url, body, userId = 1) {
     const response = await fetch(base + url, { method: body === undefined ? 'GET' : 'POST',
-      headers: { 'Content-Type': 'application/json', ...(userId ? { Authorization: `Bearer ${jwt.sign({ id: userId }, 'local-test-jwt-secret')}` } : {}) },
+      headers: { 'Content-Type': 'application/json', ...(userId ? { Authorization: `Bearer ${sessions.token({ id: userId })}` } : {}) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     return { status: response.status, body: await response.json() };
   }

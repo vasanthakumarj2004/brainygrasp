@@ -38,9 +38,15 @@ async function advanceBooking({ job, order, address, user, config, client, save 
   const remote = await client.getOrder(d.remoteOrderId, order, config, d.reference);
   if (d.shipmentId && d.shipmentId !== remote.shipmentId) throw new ShippingError('shipment_mismatch', 'Remote shipment identifier changed.');
   if (d.awb && remote.awb && d.awb !== remote.awb) throw new ShippingError('awb_mismatch', 'Remote AWB changed. Review the shipment.');
-  await persist(job.phase, { shipmentId: remote.shipmentId,
+  await persist(remote.pickupFailed ? 'pickup_failed' : job.phase, { shipmentId: remote.shipmentId,
     ...(remote.awb ? { awb: remote.awb, courierName: remote.courierName || d.courierName } : {}),
-    ...(remote.pickupConfirmed ? { pickupConfirmed: true } : {}) });
+    ...(remote.pickupFailed ? { pickupConfirmed: false, pickupScheduledDate: null } :
+      remote.pickupConfirmed ? { pickupConfirmed: true } : {}) });
+  if (remote.pickupFailed) {
+    // processShipment moves this job to needs_review. Keep the existing order,
+    // AWB and pending-operation identity; never blindly request another pickup.
+    throw new ShippingError('pickup_failed', 'Shiprocket reports a pickup error or exception. Resolve the existing pickup in Shiprocket, then resume this shipment.');
+  }
   if (!d.awb) {
     if (job.phase === 'awb_pending') throw new ShippingError('awb_uncertain', 'AWB assignment outcome is unknown. Check the existing shipment.', { retryable: true });
     await persist('awb_pending');

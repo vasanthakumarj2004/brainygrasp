@@ -19,6 +19,12 @@ created while shipping is disabled remain held for review after activation.
 7. Save booking progress and process tracking webhooks. Unknown mutation results
    are reconciled by reads instead of blindly creating another shipment.
 
+When reconciling a booking, an explicit pickup error/exception overrides any old
+scheduled date or locally saved pickup confirmation. The worker clears that
+confirmation and moves the job to `needs_review`. Resolve the existing pickup in
+Shiprocket, then resume the same shipment from Admin; this does not create another
+order or AWB. An uncertain pickup outcome is never blindly retried.
+
 The customer shipping charge remains INR 60 below an INR 999 merchandise subtotal,
 and zero at/above that threshold. Discounts follow the existing checkout policy.
 This is a store pricing policy, not a live courier quote. The store pays the actual
@@ -40,6 +46,11 @@ previous order's recorded measurements.
 Configure `SHIPROCKET_PACKAGES` as a JSON array of **your measured boxes**. This is
 an illustrative format only; do not enable shipping with unverified sample values:
 
+In an actual `.env` file, put the entire JSON array on one line, enclosed in single
+quotes (`SHIPROCKET_PACKAGES='[{...}]'`). Do not paste an unquoted multiline array.
+Package codes allow letters, digits, underscores and hyphens only; for example,
+use `BOX_SMALL_0_5KG`, not `BOX_SMALL_0.5KG`.
+
 ```json
 [
   {
@@ -60,13 +71,22 @@ Outer dimensions are sent to Shiprocket. Inner dimensions are the usable space
 after protective lining. Tare includes the outer box, tape and additional packing
 material; do not count unit wrapping twice. Maximum weight is the packed box limit.
 
-The conservative packing rule places each unit flat on its two longest sides,
-stacks the shortest sides, and chooses the smallest configured outer box that fits
-the entire stack (allowing rotation of the stack) and supports its total weight.
+Packing checks boxes in ascending outer volume, using tare and code to break ties,
+and selects the first box with a demonstrated fit and sufficient weight capacity.
+It tries rotated grids for equally sized units, existing stack arrangements, and
+side-by-side mixed-product layouts with all six right-angle orientations. Every
+unit has a saved position and orientation; volume alone never establishes fit.
+Dimensions are conservatively rounded to 0.0001 cm (units up, inner space down).
 Weight = sum(unit grams × quantity) + box tare, converted to kg. Warehouse staff
-must follow the recorded packing layout, shown in Shipping details. This rule is
-intended for stackable, rotatable products. It may reject a basket that a person
-could pack differently. Oversized baskets require arranging a custom order; the
+must follow the recorded packing layout, shown in Shipping details. Positions
+use the same inside corner, with X along length, Y along breadth and Z upwards.
+Previously recorded single-stack orders keep their original instructions.
+This rule is intended for stackable, rotatable products. Mixed-item packing uses
+a bounded heuristic, not an exhaustive search: it can still miss a possible
+arrangement or choose a larger box. The mixed-layout search is limited to 250,000
+orientation checks per order; grid and stack checks remain available afterwards.
+It does not optimize courier price or model load-bearing strength. Oversized
+baskets require arranging a custom order; the
 customer is blocked before payment rather than charged for an unbookable parcel.
 Automatic multi-box splitting, fragile/orientation-specific packing, inventory
 reservations and multiple pickup warehouses are not included.
@@ -131,6 +151,12 @@ HTTPS URL for the webhook, regardless of the storefront URL.
 The Shiprocket webhook is acknowledged only after the tracking event is stored.
 The worker applies events, handles duplicates and avoids regressing terminal
 delivery states. See `PAYMENTS_SETUP.md` for payment configuration details.
+
+Tracking polling reads `delivered_date` for a delivered shipment, otherwise the
+newest valid activity timestamp matching its current status, with `updated_at`
+as a fallback. Shiprocket's timezone-less scan timestamps are interpreted in
+Indian time. Unrelated activity timestamps and invalid dates are ignored, and
+older events cannot overwrite newer webhook updates.
 
 New courier exceptions (including Undelivered, Delayed and Pickup Error) are saved
 as the latest courier status even if they do not advance a delivery stage. Unknown

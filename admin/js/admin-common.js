@@ -41,8 +41,14 @@
   function bindLogout(buttonId) {
     const btn = document.getElementById(buttonId || 'logoutBtn');
     if (!btn) return;
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('click', async (e) => {
       e.preventDefault();
+      try {
+        if (getToken()) {
+          const response = await fetch(`${apiBase()}/api/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}` } });
+          if (!response.ok && response.status !== 401) throw new Error('Unable to sign out');
+        }
+      } catch { showToast('Unable to sign out. Check your connection and retry.', 'error'); return; }
       clearToken();
       window.location.href = 'login.html';
     });

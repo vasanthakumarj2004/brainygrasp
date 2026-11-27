@@ -13,9 +13,9 @@ const { boxes, environment, item, shippingClient } = require('./helpers/shipping
 test('packed weight includes every quantity and one outer box, and chooses a fitting box', () => {
   const result = packItems([item, { ...item, id: 2, quantity: 1, shipping_weight_g: 200, shipping_height_cm: 1 }], boxes);
   assert.deepEqual(result.parcel, { weight: 0.9, length: 22, breadth: 18, height: 12 });
-  assert.equal(result.packing.stackCm.height, 9);
+  assert.equal(result.packing.placements.length, 3);
   assert.equal(result.packageCode, 'SMALL');
-  assert.throws(() => packItems([{ ...item, quantity: 10 }], boxes), { code: 'parcel_fit' });
+  assert.throws(() => packItems([{ ...item, quantity: 11 }], boxes), { code: 'parcel_fit' });
   assert.throws(() => packItems([{ ...item, shipping_weight_g: 100000 }], boxes), { code: 'parcel_fit' });
 });
 
@@ -89,6 +89,76 @@ function bookingFixture() {
   const run = () => advanceBooking({ job, order, address, user: {}, config, client, save: async j => { saved.push(structuredClone(j)); } });
   return { job, order, remote, client, calls, saved, run };
 }
+
+function remotePickupClient(order, job, status) {
+  return createShiprocketClient({ env: environment, fetchImpl: async url => {
+    if (url.endsWith('/auth/login')) return { ok: true, json: async () => ({ token: 'fixture' }) };
+    assert.ok(url.endsWith('/orders/show/10'));
+    return { ok: true, json: async () => ({ data: {
+      id: 10, channel_order_id: job.details.reference, channel_id: 123, total: order.total,
+      payment_method: 'cod', status: status.orderStatus || 'READY TO SHIP',
+      shipments: [{ id: 20, awb: 'AWB123', pickup_scheduled_date: '2026-11-20 10:00:00',
+        status_id: status.id, status: status.label }]
+    } }) };
+  } });
+}
+
+test('pickup failures override old scheduled dates and cached confirmation without repeating shipment operations', async () => {
+  for (const status of [{ id: 13 }, { id: 20 }, { orderStatus: 'Pickup Error' }, { label: 'PICKUP_EXCEPTION' }]) {
+    const f = bookingFixture();
+    Object.assign(f.job.details, { remoteOrderId: '10', shipmentId: '20', awb: 'AWB123', courierId: 12,
+      pickupConfirmed: true, pickupScheduledDate: '2026-11-20' });
+    f.job.phase = 'pickup_pending';
+    f.client.getOrder = remotePickupClient(f.order, f.job, status).getOrder;
+    await assert.rejects(f.run(), { code: 'pickup_failed', retryable: false });
+    assert.equal(f.job.phase, 'pickup_failed');
+    assert.equal(f.job.details.pickupConfirmed, false);
+    assert.equal(f.job.details.pickupScheduledDate, null);
+    assert.deepEqual(f.calls, { create: 0, awb: 0, pickup: 0, label: 0, manifest: 0 });
+    assert.equal(f.saved.at(-1).details.pickupConfirmed, false);
+
+    // After resolving the existing pickup, admin resume recovers the same
+    // shipment and generates documents without issuing another pickup request.
+    f.client.getOrder = remotePickupClient(f.order, f.job, { id: 3 }).getOrder;
+    await f.run();
+    assert.equal(f.job.phase, 'complete');
+    assert.deepEqual(f.calls, { create: 0, awb: 0, pickup: 0, label: 1, manifest: 1 });
+  }
+});
+
+test('shipping worker persists needs_review for an explicit remote pickup error', async () => {
+  const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+  const { createRequire } = require('node:module');
+  const f = bookingFixture();
+  Object.assign(f.job, { order_id: 1, state: 'queued', attempts: 0, phase: 'pickup_confirmed' });
+  Object.assign(f.job.details, { remoteOrderId: '10', shipmentId: '20', awb: 'AWB123', courierId: 12, pickupConfirmed: true });
+  const saved = structuredClone(f.job);
+  const db = { release() {}, async query(sql, args = []) {
+    if (sql.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }] };
+    if (sql.includes('pg_advisory_unlock') || ['BEGIN','COMMIT','ROLLBACK'].includes(sql)) return { rows: [] };
+    if (sql.startsWith('SELECT * FROM shipping_jobs')) return { rows: [structuredClone(saved)] };
+    if (sql.startsWith('SELECT * FROM orders')) return { rows: [{ ...f.order, user_id: 1, shipping_snapshot: { address } }] };
+    if (sql.startsWith('SELECT name,email,phone')) return { rows: [{ email: 'fixture@example.invalid' }] };
+    if (sql.startsWith('UPDATE shipping_jobs SET phase')) {
+      Object.assign(saved, { phase: args[1], details: JSON.parse(args[2]), state: args[3] }); return { rows: [] };
+    }
+    if (sql.startsWith('UPDATE orders SET shipment_id')) return { rows: [] };
+    if (sql.startsWith('UPDATE shipping_jobs SET state')) {
+      Object.assign(saved, { state: args[1], attempts: args[2], last_error: args[3] }); return { rows: [] };
+    }
+    throw Error('Unexpected query: ' + sql);
+  } };
+  const filename = path.join(__dirname, '../shippingJobs.js'), module = { exports: {} }, localRequire = createRequire(filename);
+  const dependencies = { './db': { connect: async () => db },
+    './shiprocketService': remotePickupClient(f.order, f.job, { id: 13 }),
+    './redisClient': { deleteCache: async () => {}, CACHE_KEYS: { USER_ORDERS: id => 'orders:' + id } } };
+  vm.runInNewContext(fs.readFileSync(filename, 'utf8'), { module, exports: module.exports, process: { env: environment },
+    require: name => Object.hasOwn(dependencies, name) ? dependencies[name] : localRequire(name) });
+  await module.exports.processShipment(1);
+  assert.equal(saved.state, 'needs_review'); assert.equal(saved.phase, 'pickup_failed');
+  assert.equal(saved.details.pickupConfirmed, false);
+  assert.match(saved.last_error, /Resolve the existing pickup/);
+});
 
 for (const [operation, phase, response] of [
   ['createShipment', 'new', { order_id: 10, shipment_id: 20 }],

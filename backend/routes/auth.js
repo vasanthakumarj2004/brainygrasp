@@ -15,14 +15,11 @@
 
 const express = require('express');
 const router  = express.Router();
-const jwt     = require('jsonwebtoken');
 const pool    = require('../db'); // shared pool — no duplicate connections
 
 const { sendOTP } = require('../otpService');
-const { getCached, setCache, deleteCache, CACHE_KEYS, TTL } = require('../redisClient');
 const { authenticateToken } = require('../middleware/auth');
 
-const SECRET_KEY = process.env.JWT_SECRET;
 const { profile: validateProfile } = require('../../frontend/js/customer-validation');
 
 
@@ -31,74 +28,46 @@ const { otpLimiter } = require('../middleware/rateLimiters');
 
 // Preflight OPTIONS handled by the global CORS middleware in server.js
 
-// 1. Request OTP (Email Only)
+// OTPs are verified only against an atomic, attempt-limited database challenge.
 router.post('/api/auth/request-otp', otpLimiter, async (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ error: 'Email is required' });
-
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const expires = new Date(Date.now() + 10 * 60 * 1000);
-
+  const security = require('../authSecurity').security();
+  const email = security.emailAddress(req.body?.email);
+  if (!email) return res.status(400).json({ error: 'A valid email is required' });
   try {
-    const redisOtpData = { email, otp, expires: expires.toISOString() };
-    await setCache(CACHE_KEYS.OTP(email), redisOtpData, TTL.OTP);
-    
-    await pool.query(`
-      INSERT INTO users (email, otp, otp_expires)
-      VALUES ($1, $2, $3)
-      ON CONFLICT (email) DO UPDATE SET otp=$2, otp_expires=$3
-    `, [email, otp, expires]);
-
-    const otpSent = await sendOTP('email', email, otp);
-    if (!otpSent) {
+    await security.throttle(req, 'otp-request', email, 5);
+    const otp = await security.challenge(email);
+    if (!await sendOTP('email', email, otp)) {
+      await security.invalidateChallenge(email, otp);
       return res.status(500).json({ error: 'Failed to send OTP. Please try again.' });
     }
-
     res.json({ success: true, message: 'OTP sent to your email' });
   } catch (err) {
-    console.error('❌ OTP request error:', err);
-    res.status(500).json({ error: 'Failed to send OTP' });
+    res.status(err.status === 429 ? 429 : 503).json({ error: err.status === 429 ? err.message : 'Failed to send OTP' });
   }
 });
 
-// 2. Verify OTP
-router.post('/api/auth/verify-otp', async (req, res) => {
-  const { email, otp } = req.body;
-  if (!email || !otp) return res.status(400).json({ error: 'Email and OTP required' });
-
+router.post('/api/auth/verify-otp', otpLimiter, async (req, res) => {
+  const security = require('../authSecurity').security();
+  const email = security.emailAddress(req.body?.email);
+  if (!email) return res.status(400).json({ error: 'A valid email and OTP are required' });
   try {
-    const cachedOTP = await getCached(CACHE_KEYS.OTP(email));
-    let otpData = cachedOTP;
-
-    if (!otpData) {
-      const result = await pool.query('SELECT * FROM users WHERE email=$1', [email]);
-      if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid or expired OTP' });
-      
-      const user = result.rows[0];
-      if (!user.otp || new Date() > new Date(user.otp_expires)) {
-        return res.status(401).json({ error: 'Invalid or expired OTP' });
-      }
-      
-      otpData = { email: user.email, otp: user.otp, expires: user.otp_expires };
-    }
-
-    if (otpData.otp !== otp || new Date() > new Date(otpData.expires)) {
-      return res.status(401).json({ error: 'Invalid or expired OTP' });
-    }
-
-    const userResult = await pool.query('SELECT id, name, email, phone FROM users WHERE email=$1', [email]);
-    if (userResult.rows.length === 0) return res.status(401).json({ error: 'Invalid or expired OTP' });
-
-    const user = userResult.rows[0];
-    await deleteCache(CACHE_KEYS.OTP(email));
-    await pool.query('UPDATE users SET otp=NULL, otp_expires=NULL WHERE id=$1', [user.id]);
-
-    const token = jwt.sign({ id: user.id }, SECRET_KEY, { expiresIn: '7d' });
-    res.json({ token, user: { id: user.id, name: user.name, phone: user.phone, email: user.email } });
+    await security.throttle(req, 'otp-verify', email, 15);
+    const result = await security.consume(email, req.body?.otp);
+    if (!result) return res.status(401).json({ error: 'Invalid or expired OTP' });
+    res.set('Cache-Control', 'no-store');
+    res.json(result);
   } catch (err) {
-    console.error('OTP verification error:', err);
-    res.status(500).json({ error: 'Verification failed' });
+    res.status(err.status === 429 ? 429 : 503).json({ error: err.status === 429 ? err.message : 'Verification failed' });
   }
+});
+
+// All three login roles revoke the server session before clearing browser storage.
+router.post('/api/auth/logout', (req, res, next) => require('../authSecurity').security().authenticate()(req, res, next), async (req, res) => {
+  try {
+    await require('../authSecurity').security().revoke(req.session.sid);
+    res.set('Cache-Control', 'no-store');
+    res.json({ success: true });
+  } catch { res.status(503).json({ error: 'Unable to sign out. Please retry.' }); }
 });
 
 // 3. Get User Profile

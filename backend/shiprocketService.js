@@ -2,6 +2,24 @@
 
 const { ShippingError, shippingConfig, eligibleOrder, orderAmounts, parcelDetails, mapShiprocketStatus, eventTime } = require('./shippingPolicy');
 const API = 'https://apiv2.shiprocket.in/v1/external';
+const statusName = value => String(value || '').trim().toUpperCase().replace(/_/g, ' ').replace(/\s+/g, ' ');
+
+function trackingTime(tracking, shipment) {
+  const status = statusName(shipment.current_status);
+  // The tracking API supplies scan dates, not necessarily shipment.updated_at.
+  // Only a scan for the current status may date that status; unrelated newer
+  // scans must not make an old snapshot overwrite a newer webhook.
+  const activities = Array.isArray(tracking.shipment_track_activities) ? tracking.shipment_track_activities : [];
+  const times = activities.filter(activity => {
+    if (!activity || typeof activity !== 'object') return false;
+    const label = statusName(activity['sr-status-label']);
+    if (label) return label === status;
+    const code = String(activity['sr-status'] ?? '');
+    return /^\d+$/.test(code) && code === String(tracking.shipment_status);
+  }).map(activity => eventTime(activity.date)).filter(Boolean).sort();
+  return (status === 'DELIVERED' ? eventTime(shipment.delivered_date) : null) ||
+    times.at(-1) || eventTime(shipment.updated_at);
+}
 
 function createShiprocketClient({ env = process.env, fetchImpl = globalThis.fetch } = {}) {
   let token = null, expires = 0, loginPromise = null;
@@ -102,9 +120,15 @@ function createShiprocketClient({ env = process.env, fetchImpl = globalThis.fetc
     const shipments = Array.isArray(data.shipments) ? data.shipments : data.shipments ? [data.shipments] : [];
     if (shipments.length !== 1 || !shipments[0].id) throw new ShippingError('remote_shipment', 'Remote shipment details require review.', { retryable: true });
     const shipment = shipments[0];
+    // A scheduled date may survive a failed pickup. Explicit failure always
+    // overrides both that date and a previously saved pickup confirmation.
+    const pickupFailed = [13, 20].includes(Number(shipment.status_id)) ||
+      [data.status, shipment.status, shipment.current_status].some(value =>
+        ['PICKUP ERROR', 'PICKUP EXCEPTION', 'PICKUP FAILED'].includes(statusName(value)));
     return { remoteOrderId: String(data.id), shipmentId: String(shipment.id), awb: String(shipment.awb || shipment.awb_code || ''),
       courierName: String(shipment.courier || shipment.courier_name || ''),
-      pickupConfirmed: Boolean(shipment.pickup_scheduled_date) || [3,5,6,7,17,18,19,42].includes(Number(shipment.status_id)) };
+      pickupFailed,
+      pickupConfirmed: !pickupFailed && (Boolean(shipment.pickup_scheduled_date) || [3,5,6,7,17,18,19,42].includes(Number(shipment.status_id))) };
   }
   async function assignAWB(shipmentId, courierId) {
     const data = await call('/courier/assign/awb', { shipment_id: Number(shipmentId), courier_id: courierId });
@@ -132,7 +156,7 @@ function createShiprocketClient({ env = process.env, fetchImpl = globalThis.fetc
     const t = data.tracking_data, s = t?.shipment_track?.[0];
     if (!s?.current_status) throw new ShippingError('tracking', 'Tracking status is not available yet.', { retryable: true });
     return { awb: String(awb), srStatus: String(s.current_status), courierName: String(s.courier_name || ''),
-      estimatedDelivery: t.etd || s.etd || null, eventAt: eventTime(s.updated_at) };
+      estimatedDelivery: t.etd || s.etd || s.edd || null, eventAt: trackingTime(t, s) };
   }
   return { getToken, checkServiceability, shipmentPayload, createShipment, findOrder, getOrder, assignAWB, generatePickup, generateDocument, getTracking };
 }

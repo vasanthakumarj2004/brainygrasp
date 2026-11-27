@@ -45,31 +45,120 @@ function packageProfiles(env) {
   });
 }
 
-// Conservative single stack: longest sides form the base; shortest sides stack.
-// Unit measurements include their individual protective packaging. This proves
-// fit, rather than assuming volume alone proves that arbitrary items can fit.
+const permutations = [[0,1,2], [0,2,1], [1,0,2], [1,2,0], [2,0,1], [2,1,0]];
+const scale = 10000; // Round units up and usable space down to 0.0001 cm.
+const volume = sides => sides.reduce((a, b) => a * b, 1);
+const fits = (unit, space) => unit.every((side, axis) => side <= space[axis]);
+function rotations(sides) {
+  const seen = new Set();
+  return permutations.map(p => p.map(axis => sides[axis])).filter(s => {
+    const key = s.join(',');
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  });
+}
+
+// Exact grid layouts handle large quantities of equally sized products cheaply.
+// A placement is always recorded for every purchased unit, including mixed SKUs.
+function gridLayout(units, inside) {
+  if (!units.every(u => u.sides.every((side, axis) => side === units[0].sides[axis]))) return null;
+  for (const size of rotations(units[0].sides)) {
+    const counts = inside.map((side, axis) => Math.floor(side / size[axis]));
+    if (volume(counts) < units.length) continue;
+    return units.map((unit, i) => ({ unit, size, at: [i % counts[0] * size[0],
+      Math.floor(i / counts[0]) % counts[1] * size[1], Math.floor(i / (counts[0] * counts[1])) * size[2]] }));
+  }
+  return null;
+}
+
+// Keep the previously supported stack layouts as a guaranteed fallback.
+function stackLayout(units, inside) {
+  const stack = [Math.max(...units.map(u => u.sides[0])), Math.max(...units.map(u => u.sides[1])),
+    units.reduce((sum, u) => sum + u.sides[2], 0)];
+  for (const axes of permutations) {
+    if (!fits(axes.map(axis => stack[axis]), inside)) continue;
+    let height = 0;
+    return units.map(unit => {
+      const at = axes.map(axis => axis === 2 ? height : 0);
+      height += unit.sides[2];
+      return { unit, at, size: axes.map(axis => unit.sides[axis]) };
+    });
+  }
+  return null;
+}
+
+// Bounded, deterministic mixed-item packing. Each placed unit splits one empty
+// cuboid into disjoint spaces; rotations and different split/order strategies
+// find side-by-side layouts without treating volume alone as proof of fit.
+// This is a heuristic, not an exhaustive solution to 3-D bin packing.
+function mixedLayout(units, inside, budget) {
+  const orders = [
+    [...units].sort((a,b) => volume(b.sides) - volume(a.sides) || b.sides[0] - a.sides[0]),
+    [...units].sort((a,b) => b.sides[0] - a.sides[0] || volume(b.sides) - volume(a.sides))
+  ];
+  for (const ordered of orders) for (const axes of permutations) {
+    const spaces = [{ at: [0,0,0], size: inside }], placed = [];
+    for (const unit of ordered) {
+      let best;
+      for (let index = 0; index < spaces.length; index++) for (const size of unit.rotations) {
+        if (--budget.remaining < 0) return null;
+        const space = spaces[index];
+        if (!fits(size, space.size)) continue;
+        const capacity = volume(space.size.map((side, axis) => Math.floor(side / size[axis])));
+        const score = [volume(space.size), -capacity, ...axes.map(axis => space.size[axis] - size[axis])];
+        if (!best || score.some((n, i) => n < best.score[i] && score.slice(0, i).every((v, j) => v === best.score[j]))) {
+          best = { index, size, score };
+        }
+      }
+      if (!best) break;
+      const space = spaces.splice(best.index, 1)[0];
+      placed.push({ unit, at: space.at, size: best.size });
+      const remaining = [...space.size];
+      for (const axis of axes) {
+        if (remaining[axis] > best.size[axis]) {
+          const at = [...space.at], size = [...remaining];
+          at[axis] += best.size[axis]; size[axis] -= best.size[axis];
+          spaces.push({ at, size });
+        }
+        remaining[axis] = best.size[axis];
+      }
+    }
+    if (placed.length === units.length) return placed;
+  }
+  return null;
+}
+
 function packItems(items, boxes) {
-  if (!Array.isArray(items) || !items.length) throw new ShippingError('parcel', 'The parcel is empty.', { status: 400 });
-  let grams = 0, length = 0, breadth = 0, height = 0;
-  for (const item of items) {
-    if (!Number.isInteger(item.quantity) || item.quantity < 1) throw new ShippingError('parcel', 'Invalid parcel quantity.', { status: 400 });
+  if (!Array.isArray(items) || !items.length || items.length > 100) throw new ShippingError('parcel', 'The parcel must contain 1–100 products.', { status: 400 });
+  let grams = 0;
+  const units = [];
+  for (const [itemIndex, item] of items.entries()) {
+    if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 100) throw new ShippingError('parcel', 'Invalid parcel quantity.', { status: 400 });
     let unit;
     try { unit = productShipping(item); }
     catch { throw new ShippingError('product_parcel', `Shipping measurements are missing for ${item.name || 'a cart product'}. Please contact the store.`, { status: 409 }); }
-    const sides = [unit.shipping_length_cm, unit.shipping_breadth_cm, unit.shipping_height_cm].sort((a,b) => b-a);
-    length = Math.max(length, sides[0]); breadth = Math.max(breadth, sides[1]); height += sides[2] * item.quantity;
+    const sides = [unit.shipping_length_cm, unit.shipping_breadth_cm, unit.shipping_height_cm].map(n => Math.ceil(n * scale)).sort((a,b) => b-a);
+    const orientations = rotations(sides);
+    for (let number = 1; number <= item.quantity; number++) units.push({ itemIndex, number, sides, rotations: orientations });
     grams += unit.shipping_weight_g * item.quantity;
   }
-  const stack = [length, breadth, height].sort((a,b) => b-a);
-  const choices = boxes.filter(box => {
-    const inside = [box.inner_length, box.inner_breadth, box.inner_height].sort((a,b) => b-a);
-    return stack.every((side, index) => side <= inside[index]) && grams + box.tare_weight_g <= box.max_weight_kg * 1000;
-  }).sort((a,b) => a.length*a.breadth*a.height - b.length*b.breadth*b.height || a.tare_weight_g-b.tare_weight_g || a.code.localeCompare(b.code));
-  const box = choices[0];
-  if (!box) throw new ShippingError('parcel_fit', 'This basket needs a custom parcel. Please contact the store before ordering.', { status: 409 });
-  return { parcel: parcelDetails({ weight: (grams + box.tare_weight_g) / 1000, length: box.length, breadth: box.breadth, height: box.height }),
-    packageCode: box.code, packing: { method: 'single_stack_v1', unitWeightGrams: grams, packagingWeightGrams: box.tare_weight_g,
-      stackCm: { length, breadth, height }, innerCm: { length: box.inner_length, breadth: box.inner_breadth, height: box.inner_height } } };
+  const choices = boxes.filter(box => grams + box.tare_weight_g <= box.max_weight_kg * 1000)
+    .sort((a,b) => a.length*a.breadth*a.height - b.length*b.breadth*b.height || a.tare_weight_g-b.tare_weight_g || a.code.localeCompare(b.code));
+  const totalVolume = units.reduce((sum, u) => sum + volume(u.sides), 0);
+  const budget = { remaining: 250000 };
+  for (const box of choices) {
+    const inside = [box.inner_length, box.inner_breadth, box.inner_height].map(n => Math.floor(n * scale));
+    if (totalVolume > volume(inside) || units.some(u => !u.rotations.some(size => fits(size, inside)))) continue;
+    const layout = gridLayout(units, inside) || stackLayout(units, inside) || mixedLayout(units, inside, budget);
+    if (!layout) continue;
+    return { parcel: parcelDetails({ weight: (grams + box.tare_weight_g) / 1000, length: box.length, breadth: box.breadth, height: box.height }),
+      packageCode: box.code, packing: { method: 'orthogonal_v2', unitWeightGrams: grams, packagingWeightGrams: box.tare_weight_g,
+        innerCm: { length: box.inner_length, breadth: box.inner_breadth, height: box.inner_height },
+        placements: layout.map(({ unit, at, size }) => ({ itemIndex: unit.itemIndex, unit: unit.number,
+          x: at[0] / scale, y: at[1] / scale, z: at[2] / scale,
+          length: size[0] / scale, breadth: size[1] / scale, height: size[2] / scale })) } };
+  }
+  throw new ShippingError('parcel_fit', 'This basket needs a custom parcel. Please contact the store before ordering.', { status: 409 });
 }
 
 module.exports = { productShipping, packageProfiles, packItems, fields };

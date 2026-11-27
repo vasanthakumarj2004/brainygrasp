@@ -499,6 +499,7 @@ async function startRazorpay(token) {
       break;
     }
     if (order.stale) throw new Error('Your cart changed again. Review the updated cart and retry checkout.');
+    if (order.review_required) throw new Error(order.review_message);
     if (order.paid) { await finishOnlineOrder(token, order); return; }
     showSavedQuote(order);
     if (order.pending) {
@@ -529,6 +530,7 @@ async function startRazorpay(token) {
             razorpay_payment_id: response.razorpay_payment_id, razorpay_signature: response.razorpay_signature
           });
           if (verified.paid) { await finishOnlineOrder(token, verified); return; }
+          if (verified.review_required) throw new Error(verified.review_message);
           showMsg(`Payment for Order #${order.id} is awaiting capture. Check its status again; please do not pay again.`, 'info');
         } catch (err) {
           showMsg(`${err.message} Order #${order.id}; payment reference: ${response.razorpay_payment_id}. Resume this order to check its status.`);
@@ -604,7 +606,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         showSavedQuote(order);
         showMsg(order.resumable
           ? `Resume your saved Order #${order.id}. Its cart is unchanged.`
-          : `Payment for Order #${order.id} is awaiting confirmation. Check its status; please do not pay again.`, 'info');
+          : order.review_message || `Payment for Order #${order.id} is awaiting confirmation. Check its status; please do not pay again.`, 'info');
       }
     } catch (err) { showMsg(err.message); }
   }

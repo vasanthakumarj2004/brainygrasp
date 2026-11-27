@@ -23,7 +23,6 @@
 
 const express  = require('express');
 const router   = express.Router();
-const jwt      = require('jsonwebtoken');
 const crypto   = require('crypto');
 const pool     = require('../db');
 const { deleteCache, clearCachePattern, CACHE_KEYS } = require('../redisClient');
@@ -35,21 +34,10 @@ const { productShipping } = require('../parcelPacking');
 const { validateProductImage } = require('../productValidation');
 const { positiveId } = require('../checkoutService');
 
-const SECRET_KEY = process.env.JWT_SECRET;
 
 // ── Admin Auth Middleware ─────────────────────────────────────────────────────
 function authenticateAdmin(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Admin access denied — no token' });
-
-  jwt.verify(token, SECRET_KEY, (err, decoded) => {
-    if (err || decoded.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-    req.admin = decoded;
-    next();
-  });
+  return require('../authSecurity').security().authenticate('admin')(req, res, next);
 }
 
 // ── Startup guard: require admin credentials ─────────────────────────────────
@@ -60,22 +48,24 @@ if (!process.env.ADMIN_USERNAME || !process.env.ADMIN_PASSWORD) {
 }
 
 // ── POST /api/admin/login ─────────────────────────────────────────────────────
-router.post('/api/admin/login', (req, res) => {
-  const { username, password } = req.body;
-  const ADMIN_USER = process.env.ADMIN_USERNAME || '';
-  const ADMIN_PASS = process.env.ADMIN_PASSWORD || '';
-
-  const matches = (a, b) => {
-    if (typeof a !== 'string' || typeof b !== 'string') return false;
-    return a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-  };
-
-  if (!username || !password || !matches(username, ADMIN_USER) || !matches(password, ADMIN_PASS)) {
-    return res.status(401).json({ error: 'Invalid admin credentials' });
+router.post('/api/admin/login', async (req, res) => {
+  const { username, password } = req.body || {};
+  if (typeof username !== 'string' || username.length > 254 || typeof password !== 'string' || password.length > 1024) {
+    return res.status(400).json({ error: 'Invalid admin credentials' });
   }
-
-  const token = jwt.sign({ role: 'admin', username }, SECRET_KEY, { expiresIn: '8h' });
-  res.json({ token });
+  try {
+    const security = require('../authSecurity').security();
+    await security.throttle(req, 'admin-login', username.trim().toLowerCase());
+    const matches = (a, b) => crypto.timingSafeEqual(crypto.createHash('sha256').update(a).digest(), crypto.createHash('sha256').update(b).digest());
+    if (!matches(username, process.env.ADMIN_USERNAME) || !matches(password, process.env.ADMIN_PASSWORD)) {
+      return res.status(401).json({ error: 'Invalid admin credentials' });
+    }
+    const token = await security.issue({ role: 'admin', username });
+    res.set('Cache-Control', 'no-store');
+    res.json({ token });
+  } catch (err) {
+    res.status(err.status === 429 ? 429 : 503).json({ error: err.status === 429 ? err.message : 'Login unavailable' });
+  }
 });
 
 // ── GET /api/admin/products ───────────────────────────────────────────────────
@@ -301,7 +291,9 @@ router.get('/api/admin/orders', authenticateAdmin, async (req, res) => {
     const params     = [];
     let   idx        = 1;
 
-    if (status && status !== 'all') {
+    if (status === 'payment_review') {
+      conditions.push("o.payment_review->>'state' = 'needs_review'");
+    } else if (status && status !== 'all') {
       conditions.push(`LOWER(o.status) = $${idx++}`);
       params.push(status.toLowerCase());
     }
@@ -382,7 +374,9 @@ router.put('/api/admin/orders/:id/status', authenticateAdmin, async (req, res) =
       UPDATE orders
       SET status=$1, expected_delivery=$2, delivery_date=$3, admin_note=$4
       WHERE id=$5
-        AND (payment_method='cod' OR checkout_key IS NULL OR payment_verified_at IS NOT NULL OR LOWER($1) = 'payment pending')
+        AND (payment_method='cod' OR checkout_key IS NULL OR payment_verified_at IS NOT NULL OR LOWER($1) = 'payment pending'
+          OR (payment_review IS NOT NULL AND status=$1))
+        AND (payment_review IS NULL OR status=$1)
         AND (status=$1 OR NOT EXISTS (SELECT 1 FROM shipping_jobs WHERE order_id=orders.id AND state IN ('queued','retry','processing')))
         AND NOT (LOWER($1)='cancelled' AND shipment_id IS NOT NULL)
       RETURNING id, user_id, status, expected_delivery, delivery_date, admin_note
@@ -450,6 +444,14 @@ router.post('/api/admin/orders/:id/refresh-tracking', authenticateAdmin, async (
   } catch (err) {
     res.status(err.status || 503).json({ error: err instanceof ShippingError ? err.message : 'Unable to refresh tracking. Please try again.' });
   }
+});
+
+router.post('/api/admin/orders/:id/confirm-cod-collection', authenticateAdmin, async (req, res) => {
+  if (req.body?.collected !== true) return res.status(400).json({ error: 'Confirm that COD funds have been collected' });
+  try {
+    await require('../commissionSecurity').confirmCodCollection(pool, positiveId(req.params.id));
+    res.json({ success: true });
+  } catch (err) { res.status(err.status || 503).json({ error: err.status ? err.message : 'Unable to confirm collection' }); }
 });
 
 module.exports = router;

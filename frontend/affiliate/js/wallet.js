@@ -1,3 +1,7 @@
+function escapePayout(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+}
+
 /* Affiliate Wallet & Payouts UI Logic */
 // API_BASE is declared in auth.js which loads before this script
 
@@ -135,9 +139,9 @@ async function loadPayouts() {
       <tr>
         <td><strong style="color:var(--primary)">₹${Number(p.amount || 0).toLocaleString()}</strong></td>
         <td>${new Date(p.paid_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
-        <td><span class="badge paid">${p.status || 'PAID'}</span></td>
-        <td><span style="font-family:monospace; font-size:0.9rem;">${p.payment_reference || '—'}</span></td>
-        <td>${p.admin_note || '—'}</td>
+        <td><span class="badge paid">${escapePayout(p.status || 'PAID')}</span></td>
+        <td><span style="font-family:monospace; font-size:0.9rem;">${escapePayout(p.payment_reference || '—')}</span></td>
+        <td>${escapePayout(p.admin_note || '—')}</td>
       </tr>
     `).join('');
   } catch (err) {

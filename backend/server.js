@@ -354,8 +354,15 @@ function normalizePhone(raw) {
 (async () => {
   try {
     await initDBWithRetry();
+    await require('./authSecurity').ensureAuthSchema(pool);
+    await require('./commissionSecurity').ensureCommissionSecurity(pool);
+    const authSecurity = require('./authSecurity').security();
+    await authSecurity.cleanup();
+    setInterval(() => authSecurity.cleanup().catch(() => console.error('Session cleanup will retry')), 3600000).unref();
     await initRedis();
     require('./orderFulfillment').startShippingWorker();
+    require('./paymentReconciliation').startPaymentWorker({ pool, service: paymentRouter.paymentService,
+      onError: () => console.error('Payment reconciliation will retry.') });
     app.listen(port, '0.0.0.0', () => {
       console.log(`🚀 BrainyGrasp API running on http://localhost:${port}`);
       console.log(`🌐 Accessible from network devices at http://0.0.0.0:${port}`);

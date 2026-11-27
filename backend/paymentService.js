@@ -24,7 +24,9 @@ function createPaymentService({ pool, gateway, env, afterConfirmation, invalidat
     return {
       id: order.id, orderId: order.razorpay_order_id, key: order.razorpay_key_id,
       amount: order.amount_paise, currency: order.currency, paid: Boolean(order.payment_verified_at),
-      pending, resumable: !pending && !order.payment_verified_at && order.status === 'Payment Pending',
+      pending, resumable: !pending && !order.payment_review && !order.payment_verified_at && order.status === 'Payment Pending',
+      review_required: Boolean(order.payment_review),
+      review_message: order.payment_review ? 'Payment received for a cancelled order. Contact support for payment review/refund. Do not pay this order again.' : null,
       items: order.items, subtotal: order.subtotal, total: order.total,
       discount: order.discount, shipping: order.shipping, promo_code: order.promo_code,
     };
@@ -62,7 +64,7 @@ function createPaymentService({ pool, gateway, env, afterConfirmation, invalidat
     return initialize(order.id, userId);
   }
 
-  async function initialize(id, userId) {
+  async function initialize(id, userId, reconcileOnly = false) {
     const db = await pool.connect();
     try {
       await db.query('BEGIN');
@@ -70,13 +72,13 @@ function createPaymentService({ pool, gateway, env, afterConfirmation, invalidat
       let order = rows[0];
       if (!order || order.payment_method !== 'razorpay' || !order.checkout_key) throw new CheckoutError(404, 'Payment order not found');
       if (order.razorpay_key_id !== env.RAZORPAY_KEY_ID) throw new CheckoutError(409, 'This order uses a previous payment configuration. Contact support.');
-      if (order.payment_verified_at) {
+      if (order.payment_verified_at || order.payment_review) {
         await db.query('COMMIT');
         return checkoutResponse(order);
       }
       if (!['Payment Pending', 'Cancelled'].includes(order.status)) throw new CheckoutError(409, 'Order requires support review');
       const receipt = 'bg_' + crypto.createHash('sha256').update(`${order.user_id}:${order.checkout_key}`).digest('hex').slice(0, 32);
-      if (!order.razorpay_order_id && order.status === 'Payment Pending') {
+      if (!order.razorpay_order_id) {
         // Recover an order created remotely even if its original response was lost.
         const remoteOrders = await gateway().orders.all({ receipt, count: 100 });
         if (!Array.isArray(remoteOrders.items)) throw new Error('Invalid gateway order list');
@@ -92,7 +94,7 @@ function createPaymentService({ pool, gateway, env, afterConfirmation, invalidat
       }
       if (order.razorpay_order_id) {
         // Resolve an in-flight payment before invalidating its basket. A late
-        // capture on a cancelled order is rejected by confirm, never fulfilled.
+        // capture on a cancelled order is recorded for review, never fulfilled.
         const payments = await gateway().orders.fetchPayments(order.razorpay_order_id);
         if (!Array.isArray(payments.items)) throw new Error('Invalid gateway payment list');
         const captured = payments.items.find(payment => payment.status === 'captured');
@@ -106,6 +108,12 @@ function createPaymentService({ pool, gateway, env, afterConfirmation, invalidat
           await db.query('COMMIT');
           return checkoutResponse(order, true);
         }
+      }
+      // Background recovery reads gateway state; it must never create a new
+      // payable order or cancel a saved basket because the cart has changed.
+      if (reconcileOnly) {
+        await db.query('COMMIT');
+        return checkoutResponse(order, true);
       }
       const priced = await quoteCart(db, userId, order.promo_code, { allowEmpty: true });
       if (order.status === 'Cancelled' || !matchesQuote(order, priced)) {
@@ -150,17 +158,24 @@ function createPaymentService({ pool, gateway, env, afterConfirmation, invalidat
       if (order.payment_method !== 'razorpay' || order.razorpay_key_id !== env.RAZORPAY_KEY_ID ||
           payment.amount !== order.amount_paise || payment.currency !== order.currency ||
           !/^pay_[a-zA-Z0-9]+$/.test(payment.id)) throw new CheckoutError(400, 'Payment details do not match this order');
-      if (order.payment_verified_at) {
+      if (order.payment_verified_at || order.payment_review) {
         if (order.payment_id !== payment.id) throw new CheckoutError(409, 'Order already has a different payment');
       } else {
         if (payment.status !== 'captured' || payment.captured !== true || Number(payment.amount_refunded || 0) !== 0) {
           throw new CheckoutError(409, 'Payment has not been captured in full');
         }
-        if (order.status !== 'Payment Pending') throw new CheckoutError(409, 'Order requires support review');
-        const result = await db.query("UPDATE orders SET status = 'Paid', payment_id = $1, payment_verified_at = NOW() WHERE id = $2 RETURNING *", [payment.id, order.id]);
-        order = result.rows[0];
-        await confirmEffects(db, order);
-        changed = true;
+        if (order.status === 'Cancelled') {
+          const review = { state: 'needs_review', payment_id: payment.id, amount_paise: payment.amount,
+            currency: payment.currency, reason: 'captured_after_cancellation', observed_at: new Date().toISOString() };
+          order = (await db.query('UPDATE orders SET payment_id=$1, payment_review=$2 WHERE id=$3 RETURNING *',
+            [payment.id, JSON.stringify(review), order.id])).rows[0];
+        } else {
+          if (order.status !== 'Payment Pending') throw new CheckoutError(409, 'Order requires support review');
+          const result = await db.query("UPDATE orders SET status = 'Paid', payment_id = $1, payment_verified_at = NOW() WHERE id = $2 RETURNING *", [payment.id, order.id]);
+          order = result.rows[0];
+          await confirmEffects(db, order);
+          changed = true;
+        }
       }
       await db.query('COMMIT');
     } catch (err) { await db.query('ROLLBACK'); throw err; }
@@ -205,7 +220,11 @@ function createPaymentService({ pool, gateway, env, afterConfirmation, invalidat
     await confirm(payment, rows[0].id);
   }
 
-  return { create, verify, status, webhook };
+  async function reconcile(userId, id) {
+    validateConfig(env);
+    return initialize(id, userId, true);
+  }
+  return { create, verify, status, webhook, reconcile };
 }
 
 module.exports = { createPaymentService, validSignature, validateConfig };

@@ -6,6 +6,25 @@ The browser callback, authenticated status endpoint and signed webhook converge 
 
 ## Deployment configuration
 
+Late captures on cancelled orders are saved in `orders.payment_review` and
+acknowledged after the database commit. These orders stay cancelled; they do not
+clear carts, earn commissions, or create shipments. Repeated notifications reuse
+the same payment record. Customers see a support/refund-review message.
+
+In Admin > Orders > Payment review / refunds, inspect the payment reference and
+amount. Verify its current state and any existing refund in the Razorpay dashboard
+before issuing a refund there. Save the refund reference and outcome in the order's
+admin note, retaining its cancelled status. This application does not issue refunds
+or automatically mark these manual reviews resolved; the record remains for audit.
+
+An independent payment worker checks up to five due pending/cancelled orders every
+15 seconds. Each claim schedules the next attempt 15 minutes later, including after
+failures/restarts. It only uses the currently configured Razorpay key; orders under
+older keys require separate review. It can recover gateway IDs by receipt, but never
+creates a new gateway order or cancels a basket. It runs even with Shiprocket disabled.
+Deploy backend/frontend together and restart to apply the additive payment-review
+and reconciliation-deadline columns before the worker starts.
+
 1. Deploy backend and frontend together. Old cached checkout scripts use the obsolete request contract; refresh/invalidate their cache on deployment.
 2. Set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` as a matching **test** pair in the hosting environment. Never put the secret in browser JavaScript, HTML, screenshots, or Git.
 3. Generate a separate random webhook secret of at least 32 characters. Set it as `RAZORPAY_WEBHOOK_SECRET` on the host and enter the identical value in Razorpay's webhook configuration.

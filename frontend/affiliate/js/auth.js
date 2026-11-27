@@ -55,7 +55,14 @@ async function loginAffiliate(email, password) {
   }
 }
 
-function logoutAffiliate() {
+async function logoutAffiliate() {
+  try {
+    const token = getAffToken();
+    if (token) {
+      const response = await fetch(`${API_BASE}/api/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok && response.status !== 401) throw new Error('Unable to sign out');
+    }
+  } catch { window.alert('Unable to sign out. Check your connection and retry.'); return; }
   localStorage.removeItem('bg_aff_token');
   localStorage.removeItem('bg_aff_user');
   window.location.href = 'login.html';

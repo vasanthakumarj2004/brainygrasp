@@ -169,6 +169,7 @@ function savedAmount(value) {
     return value == null || value === '' || !Number.isFinite(Number(value)) ? 'Not available' : money(value);
 }
 function paymentLabel(order) {
+    if (order.payment_review) return 'Payment received — support review/refund required';
     if (order.payment_method === 'cod') return 'Cash on delivery';
     if (order.payment_method === 'razorpay' && order.payment_verified_at && order.payment_id) {
         return order.razorpay_key_id?.startsWith('rzp_test_') ? 'Test payment verified' : 'Payment verified';
@@ -303,7 +304,17 @@ $('profileEditForm').onsubmit = async event => {
     finally { savingProfile = false; $('saveProfileBtn').disabled = false; $('saveProfileBtn').textContent = 'Save Changes'; }
 };
 $('editProfileBtn').onclick = openModal;
-$('logoutBtn').onclick = clearAuthAndRedirect;
+$('logoutBtn').onclick = async () => {
+    const button = $('logoutBtn');
+    button.disabled = true;
+    try {
+        await apiRequest('/api/auth/logout', { method: 'POST' });
+        clearAuthAndRedirect();
+    } catch (error) {
+        if (!signedOut) showToast(error.message || 'Unable to sign out. Please retry.');
+        button.disabled = false;
+    }
+};
 $('retryProfileBtn').onclick = loadProfile;
 $('refreshOrdersBtn').onclick = loadOrders;
 $('refreshTrackingBtn').onclick = loadOrders;

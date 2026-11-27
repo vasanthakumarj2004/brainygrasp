@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "BrainyGRAS — Educational Toys E-commerce Platform",
+  "description": "BrainyGRASP — Educational Toys E-commerce Platform",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -10,14 +10,14 @@
     "test": "node --test tests/*.test.js"
   },
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Vasanthakumarj31/BRAINGRASP_DEVIN.git"
   },
   "keywords": [],
-  "author": "",
+  "author": "vasanthakumar J",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {

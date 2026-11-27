@@ -11,10 +11,14 @@ async function migratePayments(db) {
     ADD COLUMN IF NOT EXISTS amount_paise INTEGER,
     ADD COLUMN IF NOT EXISTS currency VARCHAR(3) DEFAULT 'INR',
     ADD COLUMN IF NOT EXISTS payment_verified_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS payment_review JSONB,
+    ADD COLUMN IF NOT EXISTS payment_next_check_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     ADD COLUMN IF NOT EXISTS shipping INTEGER DEFAULT 0,
     ADD COLUMN IF NOT EXISTS discount INTEGER DEFAULT 0,
     ADD COLUMN IF NOT EXISTS promo_code VARCHAR(30)`);
   await db.query('CREATE UNIQUE INDEX IF NOT EXISTS uq_checkout_request ON orders(user_id, checkout_key)');
+  await db.query(`CREATE INDEX IF NOT EXISTS ix_payment_due ON orders(payment_next_check_at)
+    WHERE payment_method='razorpay' AND payment_verified_at IS NULL AND payment_review IS NULL`);
   await db.query('CREATE UNIQUE INDEX IF NOT EXISTS uq_razorpay_order ON orders(razorpay_order_id)');
   // Applies to the new bound flow, without failing on unverified legacy duplicates.
   await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_verified_payment ON orders(payment_id)

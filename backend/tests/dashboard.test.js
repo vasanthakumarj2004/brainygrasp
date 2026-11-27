@@ -36,6 +36,22 @@ function browser() {
     return { context, elements, document, panel, handlers, windowHandlers, intervals, storage, calls, redirects,
         respond: fn => { responder = fn; }, ready: () => context.loadData() };
 }
+test('dashboard logout waits for server revocation and retains access when the request fails', async () => {
+    const b = browser(); await b.ready();
+    b.respond(async () => { throw Error('offline'); });
+    await b.elements.get('logoutBtn').onclick();
+    assert.ok(b.storage.get('bg_token')); assert.equal(b.redirects.length, 0);
+    let finish;
+    b.respond(() => new Promise(resolve => { finish = resolve; }));
+    const pending = b.elements.get('logoutBtn').onclick();
+    assert.ok(b.storage.get('bg_token')); assert.equal(b.redirects.length, 0);
+    assert.equal(b.calls.at(-1).url, '/api/auth/logout');
+    assert.equal(b.calls.at(-1).options.method, 'POST');
+    finish({ ok: true, status: 200, json: async () => ({ success: true }) });
+    await pending;
+    assert.equal(b.storage.get('bg_token'), undefined); assert.equal(b.redirects.at(-1), 'login.html');
+});
+
 test('profile failure does not block orders; retry restores complete profile', async () => {
     const b = browser(); await b.ready();
     b.respond(async url => {
@@ -145,7 +161,7 @@ function routeModule(file, dependencies) {
     const module = { exports: {} };
     vm.runInNewContext(fs.readFileSync(path.join(root, 'backend/routes', file), 'utf8'), {
         module, exports: module.exports, console, process: { env: {} },
-        require: name => name === 'express' ? { Router: () => router } : name === '../../frontend/js/customer-validation' ? require('../../frontend/js/customer-validation') : dependencies[name] || {}
+        require: name => name === 'express' ? { Router: () => router } : name === '../../frontend/js/customer-validation' ? require('../../frontend/js/customer-validation') : (name === '../customerOrder' ? require('../customerOrder') : dependencies[name] || {})
     });
     return routes;
 }

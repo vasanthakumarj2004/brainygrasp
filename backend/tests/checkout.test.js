@@ -15,6 +15,15 @@ const changedCart = [{ ...cart[0], quantity: 3 }];
 const freshOrder = { ...order, id: 43, orderId: 'order_replacement', items: changedCart, subtotal: 1500, total: 1500, amount: 150000 };
 const staleOrder = { id: 42, stale: true, resumable: false, paid: false, pending: false, current_cart: { ...freshOrder, resumable: false } };
 
+test('late captured payment shows review instructions without reopening Razorpay', async () => {
+  const b = await browser({ attempt: saved, respond: url => url.includes('/api/payment/') ? { data: {
+    ...order, resumable: false, review_required: true, review_message: 'Payment received. Contact support for refund review.'
+  } } : undefined });
+  await b.click();
+  assert.equal(b.windows.length, 0);
+  assert.ok([...b.storage.values()].some(value => String(value).includes('42')));
+});
+
 const profileToken = (id = 1, exp = Math.floor(Date.now() / 1000) + 3600) =>
   `fixture.${Buffer.from(JSON.stringify({ id, exp })).toString('base64url')}.signature`;
 

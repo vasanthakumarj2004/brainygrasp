@@ -1,9 +1,9 @@
-FROM node:20-alpine AS dependencies
+FROM node:24-alpine AS dependencies
 WORKDIR /app/backend
 COPY backend/package.json backend/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-FROM node:20-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app/backend
 ENV NODE_ENV=production PORT=5000 SERVE_FRONTEND=false
 COPY --from=dependencies --chown=node:node /app/backend/node_modules ./node_modules

@@ -16,6 +16,34 @@ host Nginx needs them. TLS certificates and Certbot stay on the host.
 
 ## Configure and start
 
+### Security update behavior
+
+The backend image uses Node 24 LTS. Rebuild the images to apply code changes.
+Startup creates the authentication tables and the COD collection column before
+accepting requests. Existing tokens and outstanding OTPs from older releases are
+invalidated; customers, affiliates and admins must sign in again. No new test
+login or shared customer password is provided.
+
+OTP codes are hashed in PostgreSQL, expire after ten minutes and allow five
+guesses. Shared account/IP limits protect OTP and password login routes. Logout
+revokes the server session; disabled affiliates and changed admin/affiliate
+credentials invalidate access. Admin MFA is not implemented by this update.
+
+COD commissions remain pending until delivery and an admin confirms collected
+funds in the order details. Test Razorpay payments never create withdrawable
+credits. Startup holds existing unpaid COD/test credits and adjusts wallets once.
+Already-paid historical commissions are preserved and require manual review if
+they came from uncollected COD or test payments. Payouts reject mismatched or
+ineligible balances instead of paying them automatically.
+
+Cloud PostgreSQL TLS now verifies certificates and hostnames. If the provider
+uses a private CA, supply `DB_SSL_CA` or a read-only `DB_SSL_CA_FILE` mount; see
+`backend/.env.example`. Compose's private local PostgreSQL remains non-TLS.
+
+Run `npm test` in `backend`. The optional PostgreSQL regression test uses only a
+disposable local database on port 15439 when `SECURITY_TEST_PG=1`; it never reads
+the application's database credentials.
+
 For a new deployment:
 
 ```sh

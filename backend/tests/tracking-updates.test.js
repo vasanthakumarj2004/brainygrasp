@@ -5,6 +5,17 @@ const { createDeliveryTracking, validWebhookKey } = require('../deliveryTracking
 const { shippingReadiness } = require('../shippingReadiness');
 const validation = require('../../frontend/js/customer-validation');
 const { environment } = require('./helpers/shippingFixture');
+const { eventTime } = require('../shippingPolicy');
+
+test('Shiprocket timestamps support Indian scan/webhook dates and explicit offsets without normalizing invalid dates', () => {
+  for (const value of ['2026-11-20 00:15:00', '2026-11-20T00:15:00', '20 11 2026 00:15:00', '2026-11-20T00:15:00+05:30']) {
+    assert.equal(eventTime(value), '2026-11-19T18:45:00.000Z');
+  }
+  assert.equal(eventTime('2026-11-20T00:15:00Z'), '2026-11-20T00:15:00.000Z');
+  assert.equal(eventTime('2026-11-20 00:15:00.123456'), '2026-11-19T18:45:00.123Z');
+  for (const value of [null, '', 'NA', '0000-00-00 00:00:00', '2026-02-30 12:00:00', '2026-02-30T12:00:00Z',
+    '2026-11-20 24:00:00', '2026-11-20 12:60:00', '2026-11-20', 'invalid']) assert.equal(eventTime(value), null, value);
+});
 
 function fixture(initial = {}) {
   let order = { id: 1, user_id: 9, awb_number: 'AWB1', status: 'Shipped', tracking_status: 'IN TRANSIT', ...initial };
@@ -74,6 +85,23 @@ test('missing timestamps do not invent a delivery date or overwrite an admin dat
   assert.equal(f.order().delivery_date, null);
   const manual = fixture({ delivery_date: '2026-11-18' }); await manual.send('DELIVERED');
   assert.equal(manual.order().delivery_date, '2026-11-18');
+});
+
+test('earlier stages never regress raw status, with or without a timestamp', async () => {
+  for (const time of [null, '2026-11-25T12:00:00Z']) {
+    const f = fixture({ status: 'Out for Delivery', tracking_status: 'OUT FOR DELIVERY', tracking_event_at: '2026-11-25T10:00:00Z' });
+    await f.send('IN TRANSIT', time);
+    assert.equal(f.order().tracking_status, 'OUT FOR DELIVERY'); assert.equal(f.updates(), 0);
+  }
+});
+
+test('undated snapshots preserve dated exceptions but delivery can still advance', async () => {
+  const f = fixture({ tracking_status: 'DELAYED', tracking_event_at: '2026-11-25T10:00:00Z' });
+  await f.send('IN TRANSIT', null); await f.send('UNKNOWN', null);
+  assert.equal(f.order().tracking_status, 'DELAYED'); assert.equal(f.updates(), 0);
+  await f.send('DELIVERED', null);
+  assert.equal(f.order().status, 'Delivered'); assert.equal(f.order().tracking_status, 'DELIVERED');
+  assert.equal(f.order().delivery_date, null);
 });
 
 test('courier events cannot confirm an unpaid order and loss is not mislabeled as a return', async () => {
