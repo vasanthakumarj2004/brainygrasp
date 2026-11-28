@@ -84,8 +84,8 @@
         <nav class="main-nav" id="mainNav">
           <ul class="nav-list">
             <li class="nav-item"><a href="shop-by-age" class="nav-link">Shop by Age</a></li>
-            <li class="nav-item"><a href="shop-by-category" class="nav-link">Shop by Category <i class="fas fa-chevron-down"></i></a></li>
-            <li class="nav-item"><a href="parents-choice" class="nav-link">Parents' Choice <i class="fas fa-chevron-down"></i></a></li>
+            <li class="nav-item"><a href="shop-by-category" class="nav-link">Shop by Category</a></li>
+            <li class="nav-item"><a href="parents-choice" class="nav-link">Parents' Choice</a></li>
             <li class="nav-item"><a href="collections?collection=gifting" class="nav-link">Gifting <i class="fas fa-chevron-down"></i></a></li>
             <li class="nav-item"><a href="collections?collection=all" class="nav-link nav-link-highlight">Shop All</a></li>
             <li class="nav-item"><a href="collections?collection=newlaunches" class="nav-link nav-link-new">New Launches</a></li>
@@ -449,28 +449,16 @@
           </div>
         </div>
       </div>
-      <!-- Shop by Category — mega -->
-      <div class="nav-item has-mega" id="navCat">
-        <button class="nav-link" aria-expanded="false">
-          <i class="fas fa-shapes nav-icon"></i>
-          Shop by Category
-          <i class="fas fa-chevron-right nav-arrow"></i>
-        </button>
-        <div class="mega-panel">
-          <div class="mega-grid"><a class="mega-card" href="shop-by-category?category=Educational+Toys"><div class="mega-card-label">Educational Toys</div></a></div>
-        </div>
-      </div>
-      <!-- Parents Choice — mega (list style) -->
-      <div class="nav-item has-mega" id="navParents">
-        <button class="nav-link" aria-expanded="false">
-          <i class="fas fa-heart nav-icon"></i>
-          Parents' Choice
-          <i class="fas fa-chevron-right nav-arrow"></i>
-        </button>
-        <div class="mega-panel">
-          <div class="mega-list"><a class="parents-line-item" href="search-results?q=SENTENCE+SAFARI">SENTENCE SAFARI</a><a class="parents-line-item" href="search-results?q=MAG+CLASH">MAG CLASH</a></div>
-        </div>
-      </div>
+      <!-- Shop by Category — plain link -->
+      <a class="nav-link" href="shop-by-category">
+        <i class="fas fa-shapes nav-icon"></i>
+        Shop by Category
+      </a>
+      <!-- Parents' Choice — plain link -->
+      <a class="nav-link" href="parents-choice">
+        <i class="fas fa-heart nav-icon"></i>
+        Parents' Choice
+      </a>
       <!-- Collections — plain link -->
       <a class="nav-link" href="collections">
         <i class="fas fa-layer-group nav-icon"></i>
@@ -483,7 +471,7 @@
       </a>
       <div class="nav-divider"></div>
       <div class="nav-section-label">Account</div>
-      <a class="nav-link" href="dashboard-new">
+      <a class="nav-link" href="dashboard">
         <i class="fas fa-user nav-icon"></i>
         My Account
       </a>

@@ -1158,7 +1158,7 @@ function syncAuthHeader() {
 
     const firstName = (user && user.name ? user.name : 'Account').split(' ')[0];
 
-    userBtn.href = 'dashboard-new';
+    userBtn.href = 'dashboard';
 
     userBtn.title = `Hi, ${firstName} – View Dashboard`;
 

@@ -229,7 +229,7 @@ async function prefillProfile(token) {
         localStorage.removeItem('bg_token');
         localStorage.removeItem('bg_user');
       }
-      localStorage.setItem('redirectAfterLogin', 'checkout_cod');
+      localStorage.setItem('redirectAfterLogin', 'checkout');
       window.location.href = 'login';
       return false;
     }
@@ -313,7 +313,9 @@ function restoreSavedAddress(attempt) {
   }
   document.getElementById('promoInput').disabled = Boolean(attempt);
   document.getElementById('tabNew').disabled = Boolean(attempt);
-  document.querySelectorAll('input[name="payMethod"]').forEach(radio => { radio.disabled = Boolean(attempt); });
+  // A pending Razorpay checkout must not lock the customer into online payment.
+  // They can cancel that attempt and place the same current basket as COD.
+  document.querySelectorAll('input[name="payMethod"]').forEach(radio => { radio.disabled = false; });
   if (attempt) window.switchTab('profile');
 }
 function resetPaymentButton() {
@@ -362,9 +364,31 @@ function discardStalePayment(order) {
 
 async function placeOrder(token, payMethod) {
   if (payMethod !== 'cod' || paymentBusy) return null;
-  if (readPaymentAttempt()) {
-    showMsg('An online checkout is saved. Resume it and check its payment status before placing another order.');
-    return null;
+  const onlineAttempt = readPaymentAttempt();
+  if (onlineAttempt?.id) {
+    try {
+      const result = await apiRequest(`/api/payment/orders/${onlineAttempt.id}/abandon`, token, {});
+      if (result.paid) {
+        await finishOnlineOrder(token, result);
+        return null;
+      }
+      if (result.pending || result.review_required) {
+        showMsg(result.review_message || `Order #${onlineAttempt.id} still has an online payment in progress. Check its status before placing a COD order.`);
+        return null;
+      }
+      if (!result.cancelled) throw new Error('The online checkout could not be cancelled. Please check its payment status and retry.');
+      const key = paymentStorageKey();
+      if (key) localStorage.removeItem(key);
+      restoreSavedAddress(null);
+    } catch (err) {
+      showMsg(err.message);
+      return null;
+    }
+  } else if (onlineAttempt) {
+    // No order was created yet, so discard only the local draft.
+    const key = paymentStorageKey();
+    if (key) localStorage.removeItem(key);
+    restoreSavedAddress(null);
   }
   let attempt = readCodAttempt();
   const addr = attempt?.address || getAddress();
@@ -419,16 +443,15 @@ function showSuccess(orderId, payNote) {
   requestAnimationFrame(() => {
     document.getElementById('redirectFill').style.width = '100%';
   });
-  setTimeout(() => window.location.href = 'dashboard-new', 3200);
+  setTimeout(() => window.location.href = 'dashboard', 3200);
 }
 
 // ── Payment Method UI Toggle ───────────────────────────────────
 function updatePayBtn() {
   const saved = readPaymentAttempt();
   const savedCod = readCodAttempt();
-  if (saved) document.querySelector('input[name="payMethod"][value="razorpay"]').checked = true;
   if (savedCod) document.querySelector('input[name="payMethod"][value="cod"]').checked = true;
-  const method = saved ? 'razorpay' : savedCod ? 'cod' : currentPayMethod();
+  const method = savedCod ? 'cod' : currentPayMethod();
   const btn    = document.getElementById('btnPlaceOrder');
   if (method === 'razorpay') {
     btn.className   = 'btn-place btn-rzp';
@@ -441,7 +464,7 @@ function updatePayBtn() {
     document.getElementById('codInfoBox').style.display = 'flex';
     document.getElementById('rzpInfoBox').style.display = 'none';
   }
-  if (saved) btn.textContent = paymentResumeAllowed ? 'Resume / Check Existing Payment' : 'Check Existing Payment';
+  if (saved && method === 'razorpay') btn.textContent = paymentResumeAllowed ? 'Resume / Check Existing Payment' : 'Check Existing Payment';
   if (savedCod) btn.textContent = 'Resume / Confirm Existing COD Order';
 }
 
@@ -558,7 +581,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 1. Auth gate
   const token = localStorage.getItem('bg_token');
   if (!token) {
-    localStorage.setItem('redirectAfterLogin', 'checkout_cod');
+    localStorage.setItem('redirectAfterLogin', 'checkout');
     window.location.href = 'login';
     return;
   }
@@ -627,7 +650,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btnPlaceOrder').addEventListener('click', async () => {
     if (paymentBusy) return;
     clearMsg();
-    const method = readPaymentAttempt() ? 'razorpay' : readCodAttempt() ? 'cod' : currentPayMethod();
+    const method = readCodAttempt() ? 'cod' : currentPayMethod();
 
     const addr = readPaymentAttempt()?.address || readCodAttempt()?.address || getAddress();
     if (!validateAddress(addr)) return;

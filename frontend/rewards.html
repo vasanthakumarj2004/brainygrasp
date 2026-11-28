@@ -70,34 +70,11 @@
             <li class="nav-item">
               <a href="shop-by-age" class="nav-link">Shop by Age</a>
             </li>
-            <li class="nav-item has-mega">
-              <a href="shop-by-category" class="nav-link">Shop by Category <i class="fas fa-chevron-down"></i></a>
-              <div class="mega-menu category-mega-menu">
-                <div class="category-mega-flex">
-                  <div class="category-mega-icons">
-                    <a href="shop-by-category?category=Educational+Toys" class="cat-mega-item" data-category="Educational Toys"><div class="cat-icon-wrap"><img src="images/products/sentence-safari/front.png" alt="Educational Toys"></div><span>Educational Toys</span></a>
-
-
-
-
-
-                  </div>
-                  <div class="category-mega-shop-all">
-                    <a href="shop-by-category" class="btn btn-outline-primary">Shop All</a>
-                  </div>
-                </div>
-              </div>
+            <li class="nav-item">
+              <a href="shop-by-category" class="nav-link">Shop by Category</a>
             </li>
-            <li class="nav-item has-mega">
-              <a href="parents-choice" class="nav-link">Parents' Choice <i class="fas fa-chevron-down"></i></a>
-              <div class="mega-menu parents-choice-mega">
-                <div class="parents-mega-flex">
-                  <div class="parents-mega-lines"><a class="parents-line-item" href="search-results?q=SENTENCE+SAFARI">SENTENCE SAFARI</a><a class="parents-line-item" href="search-results?q=MAG+CLASH">MAG CLASH</a></div>
-                  <div class="parents-mega-action">
-                    <a href="parents-choice" class="btn btn-outline-orange">Shop All</a>
-                  </div>
-                </div>
-              </div>
+            <li class="nav-item">
+              <a href="parents-choice" class="nav-link">Parents' Choice</a>
             </li>
             <li class="nav-item has-mega">
               <a href="collections?collection=gifting" class="nav-link">Gifting <i
@@ -477,13 +454,6 @@
           </a>
           <p>Where learning meets play! Educational toys designed to spark curiosity and build confidence in every
             child.</p>
-          <div class="footer-social">
-            <a href="#"><i class="fab fa-facebook-f"></i></a>
-            <a href="#"><i class="fab fa-instagram"></i></a>
-            <a href="#"><i class="fab fa-twitter"></i></a>
-            <a href="#"><i class="fab fa-youtube"></i></a>
-            <a href="#"><i class="fab fa-pinterest"></i></a>
-          </div>
         </div>
         <div class="footer-col">
           <h4>Help</h4>
@@ -637,28 +607,16 @@
           </div>
         </div>
       </div>
-      <!-- Shop by Category — mega -->
-      <div class="nav-item has-mega" id="navCat">
-        <button class="nav-link" aria-expanded="false">
-          <i class="fas fa-shapes nav-icon"></i>
-          Shop by Category
-          <i class="fas fa-chevron-right nav-arrow"></i>
-        </button>
-        <div class="mega-panel">
-          <div class="mega-grid"><a class="mega-card" href="shop-by-category?category=Educational+Toys"><div class="mega-card-label">Educational Toys</div></a></div>
-        </div>
-      </div>
-      <!-- Parents Choice — mega (list style) -->
-      <div class="nav-item has-mega" id="navParents">
-        <button class="nav-link" aria-expanded="false">
-          <i class="fas fa-heart nav-icon"></i>
-          Parents' Choice
-          <i class="fas fa-chevron-right nav-arrow"></i>
-        </button>
-        <div class="mega-panel">
-          <div class="mega-list"><a class="parents-line-item" href="search-results?q=SENTENCE+SAFARI">SENTENCE SAFARI</a><a class="parents-line-item" href="search-results?q=MAG+CLASH">MAG CLASH</a></div>
-        </div>
-      </div>
+      <!-- Shop by Category — plain link -->
+      <a class="nav-link" href="shop-by-category">
+        <i class="fas fa-shapes nav-icon"></i>
+        Shop by Category
+      </a>
+      <!-- Parents' Choice — plain link -->
+      <a class="nav-link" href="parents-choice">
+        <i class="fas fa-heart nav-icon"></i>
+        Parents' Choice
+      </a>
       <!-- Collections — plain link -->
       <a class="nav-link" href="collections">
         <i class="fas fa-layer-group nav-icon"></i>
@@ -671,7 +629,7 @@
       </a>
       <div class="nav-divider"></div>
       <div class="nav-section-label">Account</div>
-      <a class="nav-link" href="dashboard-new">
+      <a class="nav-link" href="dashboard">
         <i class="fas fa-user nav-icon"></i>
         My Account
       </a>

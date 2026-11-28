@@ -9,7 +9,7 @@ function protectPage() {
     if (!window.AuthUnified?.isAuthenticated() && !localStorage.getItem('bg_token')) {
         // Save current page for redirect after login
         const currentPage = window.location.pathname + window.location.search;
-        localStorage.setItem('redirectAfterLogin', currentPage.includes('checkout') ? 'checkout_cod' : currentPage);
+        localStorage.setItem('redirectAfterLogin', currentPage.includes('checkout') ? 'checkout' : currentPage);
         
         // Redirect to login
         window.location.href = 'login';

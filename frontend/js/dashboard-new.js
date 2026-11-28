@@ -224,7 +224,7 @@ function renderTrackingBar(order) {
             <div class="tracking-progress-line" style="width:${index * 20}%"></div>
             ${stages.map((stage, i) => `<div class="tracking-step ${i < index ? 'completed' : i === index ? 'active' : ''}" ${i === index ? 'aria-current="step"' : ''}><div class="step-icon">${i < index ? '&#10003;' : i + 1}</div><div class="step-label">${stage}</div></div>`).join('')}
         </div>`}
-        ${status === 'payment pending' ? '<p><a href="checkout_cod">Resume checkout / check payment</a></p>' : ''}
+        ${status === 'payment pending' ? '<p><a href="checkout">Resume checkout / check payment</a></p>' : ''}
         ${shipmentProgress(order)}
         <div class="tracking-meta">
             <span>Courier status: <strong>${escapeHTML(order.tracking_status || 'Awaiting courier update')}</strong></span>

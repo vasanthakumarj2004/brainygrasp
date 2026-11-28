@@ -16,7 +16,7 @@ function browser() {
             classList: { toggle() {}, remove() {} }, setAttribute() {}, focus() {}, scrollIntoView() {},
             reportValidity: () => true, querySelectorAll: () => [], addEventListener(name, fn) { this[name] = fn; } };
     }
-    for (const match of fs.readFileSync(path.join(root, 'frontend/dashboard-new.html'), 'utf8').matchAll(/id="([^"]+)"/g)) elements.set(match[1], element(match[1]));
+    for (const match of fs.readFileSync(path.join(root, 'frontend/dashboard.html'), 'utf8').matchAll(/id="([^"]+)"/g)) elements.set(match[1], element(match[1]));
     const panel = element('panel');
     const document = { hidden: false, body: { style: {} }, getElementById: id => elements.get(id),
         querySelector: selector => selector === '.orders-panel' ? panel : null, querySelectorAll: () => [],

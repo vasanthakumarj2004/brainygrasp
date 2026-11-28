@@ -204,6 +204,37 @@ function createPaymentService({ pool, gateway, env, afterConfirmation, invalidat
     return initialize(id, userId);
   }
 
+  async function abandon(userId, id) {
+    // Reconcile with Razorpay first. A captured or in-flight payment must not
+    // be silently converted into a second COD order.
+    const current = await status(userId, id);
+    if (current.paid || current.review_required || current.pending) return current;
+    if (current.stale) return { id: current.id, cancelled: true, paid: false, pending: false };
+    if (!current.resumable) throw new CheckoutError(409, 'This payment checkout cannot be cancelled. Check its payment status.');
+
+    const db = await pool.connect();
+    try {
+      await db.query('BEGIN');
+      const { rows } = await db.query('SELECT * FROM orders WHERE id = $1 AND user_id = $2 FOR UPDATE', [positiveId(id), userId]);
+      const order = rows[0];
+      if (!order || order.payment_method !== 'razorpay') throw new CheckoutError(404, 'Payment order not found');
+      if (order.payment_verified_at || order.payment_review) {
+        await db.query('COMMIT');
+        return checkoutResponse(order);
+      }
+      if (order.status === 'Cancelled') {
+        await db.query('COMMIT');
+        return { id: order.id, cancelled: true, paid: false, pending: false };
+      }
+      if (order.status !== 'Payment Pending') throw new CheckoutError(409, 'This payment checkout cannot be cancelled. Check its payment status.');
+      await db.query("UPDATE orders SET status = 'Cancelled' WHERE id = $1", [order.id]);
+      await db.query('COMMIT');
+      await invalidateOrderCache(userId).catch(() => {});
+      return { id: order.id, cancelled: true, paid: false, pending: false };
+    } catch (err) { await db.query('ROLLBACK'); throw err; }
+    finally { db.release(); }
+  }
+
   async function webhook(raw, signature) {
     if (!env.RAZORPAY_WEBHOOK_SECRET) throw new CheckoutError(503, 'Webhook is not configured');
     if (!Buffer.isBuffer(raw) || !validSignature(raw, signature, env.RAZORPAY_WEBHOOK_SECRET)) throw new CheckoutError(400, 'Invalid webhook signature');
@@ -224,7 +255,7 @@ function createPaymentService({ pool, gateway, env, afterConfirmation, invalidat
     validateConfig(env);
     return initialize(id, userId, true);
   }
-  return { create, verify, status, webhook, reconcile };
+  return { create, verify, status, abandon, webhook, reconcile };
 }
 
 module.exports = { createPaymentService, validSignature, validateConfig };

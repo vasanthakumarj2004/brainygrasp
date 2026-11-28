@@ -13,6 +13,19 @@ function mountFrontend(app, { root = path.resolve(__dirname, '..') } = {}) {
   }
   // Mount after API routes. An unknown API URL must never return a frontend page.
   app.use('/api', (req, res) => res.status(404).json({ error: 'API route not found' }));
+  // Redirect legacy storefront URLs to clean canonical paths.
+  app.use((req, res, next) => {
+    if (!['GET', 'HEAD'].includes(req.method)) return next();
+    const [pathname] = req.originalUrl.split('?');
+    const query = req.originalUrl.slice(pathname.length);
+    if (/^\/(?:frontend\/)?dashboard-new(?:\.html)?$/.test(pathname)) {
+      return res.redirect(301, (pathname.startsWith('/frontend/') ? '/frontend/dashboard' : '/dashboard') + query);
+    }
+    if (/^\/(?:frontend\/)?checkout_cod(?:\.html)?$/.test(pathname)) {
+      return res.redirect(301, (pathname.startsWith('/frontend/') ? '/frontend/checkout' : '/checkout') + query);
+    }
+    next();
+  });
   // Redirect browser URLs only; static middleware still reads .html files.
   // Keep query strings intact (search, affiliate attribution and checkout).
   app.use((req, res, next) => {

@@ -113,6 +113,6 @@ test('Docker API starts independently and reports healthy database and Redis', s
   const health = await response.json();
   assert.equal(health.services.database, 'healthy');
   assert.equal(health.services.redis, 'healthy');
-  assert.equal((await get(new URL('/checkout_cod.html', api))).status, 404);
+  assert.equal((await get(new URL('/checkout.html', api))).status, 404);
   assert.equal((await get(new URL('/admin/index.html', api))).status, 404);
 });

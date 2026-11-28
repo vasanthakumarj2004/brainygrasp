@@ -123,7 +123,7 @@ function initCheckoutProtection() {
             // 2. Check auth status
             if (!isAuthenticated()) {
                 // Save redirect intent
-                const targetUrl = checkoutLink.href || checkoutLink.dataset.href || 'checkout_cod';
+                const targetUrl = checkoutLink.href || checkoutLink.dataset.href || 'checkout';
                 localStorage.setItem('redirectAfterLogin', targetUrl);
 
                 // Show custom login prompt modal with required message
@@ -154,13 +154,13 @@ function initCheckoutProtection() {
             // Wait for all durable changes before navigating away.
             if (!await window.CartSync.sync()) {
                 if (!isAuthenticated()) {
-                    localStorage.setItem('redirectAfterLogin', checkoutLink.href || 'checkout_cod');
+                    localStorage.setItem('redirectAfterLogin', checkoutLink.href || 'checkout');
                     window.location.href = 'login';
                 }
                 return;
             }
             // User is authenticated, proceed to checkout
-            const targetUrl = checkoutLink.href || 'checkout_cod';
+            const targetUrl = checkoutLink.href || 'checkout';
             window.location.href = targetUrl;
         }
     });
@@ -243,15 +243,17 @@ async function handleVerifyOTP() {
                 // 5. Smart Redirect based on profile completion
                 let redirectPath = localStorage.getItem('redirectAfterLogin')?.replace(/\.html(?=[?#]|$)/, '');
                 
-                // ── BUG FIX: Handle stale localStorage values from before the fix
-                if (redirectPath === 'dashboard' || (redirectPath && redirectPath.endsWith('/dashboard'))) {
-                    redirectPath = 'dashboard-new';
+                // Normalize legacy redirect paths
+                if (redirectPath === 'dashboard-new' || (redirectPath && redirectPath.endsWith('/dashboard-new'))) {
+                    redirectPath = 'dashboard';
+                } else if (redirectPath === 'checkout_cod' || (redirectPath && redirectPath.endsWith('/checkout_cod'))) {
+                    redirectPath = 'checkout';
                 }
 
                 if (!profileData.profile_completed) {
                     // First-time user: save where they eventually want to land
                     // after completing their profile (checkout or dashboard)
-                    localStorage.setItem('postProfileRedirect', redirectPath || 'dashboard-new');
+                    localStorage.setItem('postProfileRedirect', redirectPath || 'dashboard');
                     localStorage.removeItem('redirectAfterLogin');
                     // Use replace() — removes login from browser history so
                     // pressing Back from profile-setup skips over login entirely.
@@ -264,24 +266,26 @@ async function handleVerifyOTP() {
                     window.location.replace(redirectPath);
                 } else {
                     // Returning user: default → dashboard
-                    window.location.replace('dashboard-new');
+                    window.location.replace('dashboard');
                 }
             } catch (error) {
                 console.error('Profile status check failed:', error);
                 // Fallback: use data.user from the JWT response
                 let redirectPath = localStorage.getItem('redirectAfterLogin')?.replace(/\.html(?=[?#]|$)/, '');
-                if (redirectPath === 'dashboard' || (redirectPath && redirectPath.endsWith('/dashboard'))) {
-                    redirectPath = 'dashboard-new';
+                if (redirectPath === 'dashboard-new' || (redirectPath && redirectPath.endsWith('/dashboard-new'))) {
+                    redirectPath = 'dashboard';
+                } else if (redirectPath === 'checkout_cod' || (redirectPath && redirectPath.endsWith('/checkout_cod'))) {
+                    redirectPath = 'checkout';
                 }
                 if (!data.user.profile_completed) {
-                    localStorage.setItem('postProfileRedirect', redirectPath || 'dashboard-new');
+                    localStorage.setItem('postProfileRedirect', redirectPath || 'dashboard');
                     localStorage.removeItem('redirectAfterLogin');
                     window.location.replace('profile-setup');
                 } else if (redirectPath) {
                     localStorage.removeItem('redirectAfterLogin');
                     window.location.replace(redirectPath);
                 } else {
-                    window.location.replace('dashboard-new');
+                    window.location.replace('dashboard');
                 }
             }
         } else {
@@ -469,7 +473,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // typed the URL directly, or the page was pre-fetched), redirect them to
     // the dashboard immediately — they should never see the sign-in form.
     if (document.getElementById('requestOTPBtn') && isAuthenticated()) {
-        window.location.replace('dashboard-new');
+        window.location.replace('dashboard');
         return; // stop all further DOMContentLoaded setup
     }
 
@@ -642,7 +646,7 @@ window.addEventListener('pageshow', (event) => {
 
         // If the user completed login before pressing Back, send them forward
         if (isAuthenticated()) {
-            window.location.replace('dashboard-new');
+            window.location.replace('dashboard');
         }
     }
 });

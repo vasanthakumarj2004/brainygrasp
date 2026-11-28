@@ -36,6 +36,9 @@ router.get('/api/payment/orders/:id', authenticateToken, limiter, async (req, re
   res.set('Cache-Control', 'no-store');
   try { res.json(await service.status(req.user.id, req.params.id)); } catch (err) { sendError(res, err); }
 });
+router.post('/api/payment/orders/:id/abandon', authenticateToken, limiter, async (req, res) => {
+  try { res.json(await service.abandon(req.user.id, req.params.id)); } catch (err) { sendError(res, err); }
+});
 // Mounted with express.raw BEFORE the application's JSON parser.
 router.webhook = async (req, res) => {
   try { await service.webhook(req.body, req.get('x-razorpay-signature')); res.json({ received: true }); }
