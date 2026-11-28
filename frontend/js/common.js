@@ -24,6 +24,28 @@ function initAnnouncementSlider() {
 
 // Full search implementation is in modern-search.js
 
+// Keep behavior out of HTML event attributes so a strict script CSP can apply.
+document.addEventListener('submit', event => {
+  if (event.target.matches('.newsletter-form')) event.preventDefault();
+}, true);
+
+// One capture listener handles fallback behavior for images rendered later.
+document.addEventListener('error', event => {
+  const image = event.target;
+  if (!(image instanceof HTMLImageElement) || image.dataset.imageFallbackDone) return;
+  const fallback = image.dataset.imageFallback;
+  if (!fallback) return;
+  image.dataset.imageFallbackDone = 'true';
+  if (fallback === 'cart') {
+    image.style.display = 'none';
+    if (image.nextElementSibling) image.nextElementSibling.style.display = 'flex';
+  } else {
+    image.src = typeof window.productImageUrl === 'function'
+      ? window.productImageUrl(null)
+      : '/images/product-placeholder.svg';
+  }
+}, true);
+
 // === Cart Sidebar (UPDATED) ===
 
 function initCart(retryCount = 0) {
@@ -419,7 +441,7 @@ function renderCartSidebar() {
       <div class="cart-item">
 
         ${item.image
-        ? `<img class="cart-item-img" src="${escapeHTML(item.image)}" alt="${escapeHTML(item.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+        ? `<img class="cart-item-img" src="${escapeHTML(item.image)}" alt="${escapeHTML(item.name)}" data-image-fallback="cart">`
         : ''}
         <div class="cart-item-img-placeholder" style="${item.image ? 'display:none' : ''}">🧸</div>
 

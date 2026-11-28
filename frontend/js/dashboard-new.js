@@ -283,6 +283,13 @@ function closeModal() {
     $('editProfileBtn').focus();
 }
 function handleModalBackdrop(event) { if (event.target === modal) closeModal(); }
+document.querySelectorAll('.order-tab[data-tab]').forEach(button => {
+    button.addEventListener('click', () => switchOrderTab(button.dataset.tab));
+});
+modal.addEventListener('click', handleModalBackdrop);
+document.querySelectorAll('[data-modal-close]').forEach(button => {
+    button.addEventListener('click', closeModal);
+});
 $('profileEditForm').onsubmit = async event => {
     event.preventDefault();
     if (savingProfile || !event.target.reportValidity()) return;

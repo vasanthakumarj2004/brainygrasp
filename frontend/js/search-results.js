@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     stats.textContent = `${filtered.length} product${filtered.length === 1 ? '' : 's'} found`;
     const visible = filtered.slice((page - 1) * 12, page * 12);
     container.innerHTML = visible.length ? `<div class="products-grid">${visible.map(p => `<article class="product-card">
-      <img class="product-image" src="${catalogEscape(productImageUrl(p.image))}" alt="${catalogEscape(p.name)}" loading="lazy" onerror="this.onerror=null;this.src=productImageUrl(null)">
+      <img class="product-image" src="${catalogEscape(productImageUrl(p.image))}" alt="${catalogEscape(p.name)}" loading="lazy" data-image-fallback="product">
       <div class="product-info"><h3 class="product-name">${catalogEscape(p.name)}</h3>
       <p class="product-category">${catalogEscape(p.category || '')}</p><p>${catalogEscape(p.age || p.ageGroup || '')}</p>
       <p class="product-price">${money(p.price)} ${p.originalPrice > p.price ? `<del>${money(p.originalPrice)}</del>` : ''}</p>
@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!p) { if (dialog.open) dialog.close(); return; }
     viewedId = id;
     document.getElementById('searchQuickViewContent').innerHTML = `<h2 id="searchQuickViewTitle">${catalogEscape(p.name)}</h2>
-      <img src="${catalogEscape(productImageUrl(p.image))}" alt="${catalogEscape(p.name)}" style="width:100%;max-height:280px;object-fit:contain" onerror="this.onerror=null;this.src=productImageUrl(null)">
+      <img src="${catalogEscape(productImageUrl(p.image))}" alt="${catalogEscape(p.name)}" style="width:100%;max-height:280px;object-fit:contain" data-image-fallback="product">
       <p>${money(p.price)} ${p.originalPrice > p.price ? `<del>${money(p.originalPrice)}</del>` : ''}</p>
       <p>${catalogEscape(p.category || '')} · ${catalogEscape(p.age || p.ageGroup || '')}</p>
       ${productDetailsHTML(p)}<p>${catalogEscape(p.offer || '')}</p>

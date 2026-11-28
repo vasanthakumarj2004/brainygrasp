@@ -301,7 +301,7 @@
 
 <!-- HEADER -->
 <header class="co-header">
-  <a href="javascript:history.back()"><i class="fas fa-arrow-left"></i> Back</a>
+  <a href="index" id="checkoutBackLink"><i class="fas fa-arrow-left"></i> Back</a>
   <a href="index" style="text-decoration: none; display: flex; align-items: center; gap: 8px; margin: 0 auto;">
     <img src="images/logo.jpeg" alt="BrainyGrasp Logo" class="brand-logo" style="height: 40px;">
   </a>
@@ -347,10 +347,10 @@
 
       <!-- ADDRESS TABS -->
       <div class="addr-tabs" id="addrTabs">
-        <button class="addr-tab active" id="tabProfile" onclick="switchTab('profile')">
+        <button class="addr-tab active" id="tabProfile" data-checkout-tab="profile">
           <i class="fas fa-user"></i> Profile Address
         </button>
-        <button class="addr-tab" id="tabNew" onclick="switchTab('new')">
+        <button class="addr-tab" id="tabNew" data-checkout-tab="new">
           <i class="fas fa-plus"></i> Different Address
         </button>
       </div>
@@ -493,7 +493,7 @@
       <!-- Promo code -->
       <div class="promo-row">
         <input type="text" id="promoInput" placeholder="Promo / Coupon code" style="text-transform:uppercase">
-        <button class="btn-promo" onclick="applyPromo()">Apply</button>
+        <button class="btn-promo" id="applyPromoBtn">Apply</button>
       </div>
       <div id="promoMsg" style="font-size:.78rem;margin-top:6px;font-weight:700;display:none"></div>
     </div>

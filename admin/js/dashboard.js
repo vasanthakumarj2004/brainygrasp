@@ -34,7 +34,7 @@
       const lbl = sales === 0 ? 'No sales' : `${Number(sales).toLocaleString('en-IN')} sold`;
       return `<div class="pi-item">
         <div class="pi-rank ${isLow ? 'warn' : rankClass(i)}">${isLow ? '!' : '#' + (i + 1)}</div>
-        <img class="pi-img" src="${esc(p.image || '')}" alt="${esc(p.name)}" onerror="this.onerror=null;this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2280%22 height=%2280%22 viewBox=%220 0 80 80%22><rect width=%22100%25%22 height=%22100%25%22 fill=%22%231c2333%22/><text x=%2250%25%22 y=%2250%25%22 fill=%22%2364748b%22 font-size=%2211%22 text-anchor=%22middle%22 dy=%22.3em%22>No Image</text></svg>'">
+        <img class="pi-img" src="${esc(p.image || '')}" alt="${esc(p.name)}" data-admin-image-fallback>
         <div class="pi-info">
           <div class="pi-name" title="${esc(p.name)}">${esc(p.name)}</div>
           <div class="pi-cat">${esc(p.category || '—')} · ₹${Number(p.price).toLocaleString('en-IN')}</div>

@@ -15,6 +15,11 @@ items for removed IDs are rejected by checkout. To apply it to an initialized
 database manually, run `node backend/import-catalog.js` from the project root.
 Deploy frontend assets and backend changes together.
 
+The `2026-11-28-mag-clash-price-1-inr` one-time data migration updates Mag
+Clash to ₹1 and its displayed savings to 99.8% on the next backend start. It
+stores the previous Mag Clash product row in `catalog_migrations` and does not
+overwrite later admin changes after it has been applied.
+
 Both products start at 50 units in `stock_quantity`; this is catalog metadata,
 not an automated inventory reservation/decrement system. Existing admin edits
 preserve `details` and stock. The admin list displays the recorded stock.

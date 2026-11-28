@@ -4,6 +4,20 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'self'",
+  "script-src 'self' https://checkout.razorpay.com https://api.razorpay.com https://cdn.razorpay.com https://checkout-static-next.razorpay.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://checkout-static-next.razorpay.com",
+  "font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com",
+  "img-src 'self' data: blob: https:",
+  "connect-src 'self' http://localhost:3000 http://127.0.0.1:3000 https://brainygrasp-api.onrender.com https://api.razorpay.com https://checkout.razorpay.com https://lumberjack.razorpay.com",
+  "frame-src https://api.razorpay.com https://checkout.razorpay.com",
+  "form-action 'self' https://api.razorpay.com https://checkout.razorpay.com",
+].join('; ');
+
 function mountFrontend(app, { root = path.resolve(__dirname, '..') } = {}) {
   const frontend = path.join(root, 'frontend');
   const admin = path.join(root, 'admin');
@@ -43,6 +57,7 @@ function mountFrontend(app, { root = path.resolve(__dirname, '..') } = {}) {
       // Revalidate scripts/styles on deployment; do not retain protected HTML.
       res.set('Cache-Control', path.extname(file) === '.html' ? 'no-store' : 'public, max-age=0, must-revalidate');
       res.set('X-Content-Type-Options', 'nosniff');
+      if (path.extname(file) === '.html') res.set('Content-Security-Policy', CONTENT_SECURITY_POLICY);
     },
   };
   app.use('/admin', express.static(admin, options));

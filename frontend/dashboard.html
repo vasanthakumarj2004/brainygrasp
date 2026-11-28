@@ -96,10 +96,10 @@
                 <div id="ordersFeedback" class="feedback" role="status" hidden></div>
                 <!-- Order Tabs -->
                 <div class="order-tabs" aria-label="Order views">
-                    <button class="order-tab active" data-tab="current" aria-pressed="true" aria-controls="currentOrdersSection" onclick="switchOrderTab('current')">
+                    <button class="order-tab active" data-tab="current" aria-pressed="true" aria-controls="currentOrdersSection">
                         <i class="fas fa-box"></i> Current Orders
                     </button>
-                    <button class="order-tab" data-tab="history" aria-pressed="false" aria-controls="historyOrdersSection" onclick="switchOrderTab('history')">
+                    <button class="order-tab" data-tab="history" aria-pressed="false" aria-controls="historyOrdersSection">
                         <i class="fas fa-history"></i> Order History
                     </button>
                 </div>
@@ -136,11 +136,11 @@
     </div>
 
     <!-- Edit Profile Modal -->
-    <div id="profileEditModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="editProfileHeading" onclick="handleModalBackdrop(event)">
+    <div id="profileEditModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="editProfileHeading">
         <div class="modal-content">
             <div class="modal-header">
                 <h2 id="editProfileHeading" style="font-family: 'Fredoka'; margin: 0; color: #764ba2;"><i class="fas fa-user-edit"></i> Edit Profile</h2>
-                <button class="modal-close-btn" type="button" onclick="closeModal()" aria-label="Close">&times;</button>
+                <button class="modal-close-btn" type="button" data-modal-close aria-label="Close">&times;</button>
             </div>
 
             <form id="profileEditForm">
@@ -213,7 +213,7 @@
                 <!-- Actions -->
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
                     <button type="submit" id="saveProfileBtn" class="btn btn-primary" style="flex: 2;"><i class="fas fa-save"></i> Save Changes</button>
-                    <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="closeModal()">Cancel</button>
+                    <button type="button" class="btn btn-secondary" style="flex: 1;" data-modal-close>Cancel</button>
                 </div>
             </form>
         </div>

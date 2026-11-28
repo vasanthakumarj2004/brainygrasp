@@ -66,7 +66,7 @@ test('product card and gallery images use the storefront asset directory on nest
     b.run('frontend/js/products.js');
     for (const product of require('../catalog-products.json')) {
       const markup = b.context.createProductCard(product);
-      assert.match(markup, /onerror="this.onerror=null;this.src=productImageUrl\(null\)"/);
+      assert.match(markup, /data-image-fallback="product"/);
       const src = decode(markup.match(/<img src="([^"]+)"/)[1]);
       assert.equal(src, assetBase + product.image.slice(1));
       for (const picture of product.details.images) assert.equal(b.context.productImageUrl(picture.src), assetBase + picture.src.slice(1));
@@ -198,7 +198,7 @@ test('real catalog details use supplied prices, images, contents and appropriate
   assert.equal(catalog.length, 2);
   const [sentence, magnets] = catalog.map(p => b.context.normalizeProduct(p));
   assert.equal(sentence.price, 549); assert.equal(sentence.originalPrice, 679);
-  assert.equal(magnets.price, 549); assert.equal(magnets.originalPrice, 649);
+  assert.equal(magnets.price, 1); assert.equal(magnets.originalPrice, 649);
   for (const p of catalog) {
     assert.equal(p.stock_quantity, 50);
     assert.equal(p.details.images.length, 3);

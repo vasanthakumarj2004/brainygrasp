@@ -153,7 +153,7 @@
       <tr>
         <td><span class="id-badge">#${p.id}</span></td>
         <td class="img-cell">
-          <img src="${esc(p.image)}" alt="${esc(p.name)}" onerror="this.onerror=null;this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2245%22 viewBox=%220 0 60 45%22><rect width=%22100%25%22 height=%22100%25%22 fill=%22%231c2333%22/><text x=%2250%25%22 y=%2250%25%22 fill=%22%2364748b%22 font-size=%2210%22 text-anchor=%22middle%22 dy=%22.3em%22>No Image</text></svg>'">
+          <img src="${esc(p.image)}" alt="${esc(p.name)}" data-admin-image-fallback>
         </td>
         <td class="name-cell">${esc(p.name)}${Number.isInteger(p.stock_quantity) ? `<div>Stock: ${p.stock_quantity}</div>` : ''}<div style="font-size:12px;color:var(--muted)">${p.shipping_weight_g ? `${esc(p.shipping_weight_g)} g · ${esc(p.shipping_length_cm)} × ${esc(p.shipping_breadth_cm)} × ${esc(p.shipping_height_cm)} cm` : 'Shipping measurements needed'}</div></td>
         <td><span class="group-tag group-${esc(p.group_name)}">${esc(capitalize(p.group_name))}</span></td>

@@ -4,6 +4,13 @@
 (function () {
   const TOKEN_KEY = 'adminToken';
 
+  document.addEventListener('error', event => {
+    const image = event.target;
+    if (!(image instanceof HTMLImageElement) || !image.hasAttribute('data-admin-image-fallback') || image.dataset.fallbackDone) return;
+    image.dataset.fallbackDone = 'true';
+    image.src = '/images/product-placeholder.svg';
+  }, true);
+
   function apiBase() {
     return (window.BG_ADMIN_CONFIG && window.BG_ADMIN_CONFIG.API_BASE) || '';
   }

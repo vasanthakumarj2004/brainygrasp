@@ -50,6 +50,17 @@ window.switchTab = function(tab) {
   document.getElementById('newAddrPanel').style.display    = tab === 'new'     ? 'block' : 'none';
 };
 
+document.querySelectorAll('[data-checkout-tab]').forEach(button => {
+  button.addEventListener('click', () => window.switchTab(button.dataset.checkoutTab));
+});
+document.getElementById('applyPromoBtn')?.addEventListener('click', () => window.applyPromo());
+document.getElementById('checkoutBackLink')?.addEventListener('click', event => {
+  if (window.history.length > 1) {
+    event.preventDefault();
+    window.history.back();
+  }
+});
+
 // ── Collect Address from active tab ───────────────────────────
 function getAddress() {
   if (currentTab === 'profile') {

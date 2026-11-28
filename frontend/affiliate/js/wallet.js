@@ -17,6 +17,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load fresh wallet data and payout history
   await loadWalletData();
   await loadPayouts();
+  document.addEventListener('click', event => {
+    if (event.target.closest('[data-retry-payouts]')) loadPayouts();
+  });
 
   // Logout handler
   const logoutBtn = document.getElementById('btnLogout');
@@ -149,7 +152,7 @@ async function loadPayouts() {
     tableBody.innerHTML = `
       <tr><td colspan="5" style="text-align:center;color:#EF4444;padding:20px;">
         ⚠️ Failed to load payout history.
-        <button onclick="loadPayouts()" class="btn-retry" style="margin-left:8px;">
+        <button type="button" data-retry-payouts class="btn-retry" style="margin-left:8px;">
           <i class="fas fa-redo"></i> Retry
         </button>
       </td></tr>`;

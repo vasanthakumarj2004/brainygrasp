@@ -65,7 +65,7 @@ function createProductCard(product) {
         <button class="share-btn"><i class="fas fa-share-alt"></i></button>
       </div>
       <div class="product-image">
-        <img src="${catalogEscape(productImageUrl(product.image))}" alt="${catalogEscape(product.name || 'Product')}" loading="lazy" onerror="this.onerror=null;this.src=productImageUrl(null)">
+        <img src="${catalogEscape(productImageUrl(product.image))}" alt="${catalogEscape(product.name || 'Product')}" loading="lazy" data-image-fallback="product">
       </div>
       <div class="product-info">
         <div class="product-age-pill">Ages: ${catalogEscape(ageText)}</div>

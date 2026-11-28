@@ -41,8 +41,14 @@ test('one server serves every storefront, admin and affiliate page with local sc
     assert.equal(response.status, 200, page);
     assert.match(response.headers.get('content-type'), /text\/html/);
     assert.equal(response.headers.get('cache-control'), 'no-store');
+    const csp = response.headers.get('content-security-policy');
+    assert.match(csp, /script-src 'self'/);
+    assert.doesNotMatch(csp, /script-src[^;]*'unsafe-inline'/);
+    assert.match(csp, /https:\/\/brainygrasp-api\.onrender\.com/);
     const html = await response.text();
     assert.match(html, /Brain[y]?Grasp|BrainGrasp/i);
+    assert.doesNotMatch(html, /\s(?:on(?:click|submit|error|load))\s*=/i);
+    assert.doesNotMatch(html, /<script\s*>/i);
     const resources = [...html.matchAll(/<(?:script|link|img)\b[^>]*(?:src|href)=["']([^"']+)["']/gi)]
       .map(match => new URL(match[1], base + page)).filter(url => url.origin === base);
     for (const url of resources) {

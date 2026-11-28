@@ -88,6 +88,13 @@
   function renderWalletsTable(affiliates) {
     const tbody = document.getElementById('walletsTableBody');
     if (!tbody) return;
+    if (!tbody.dataset.actionsBound) {
+      tbody.dataset.actionsBound = 'true';
+      tbody.addEventListener('click', event => {
+        const button = event.target.closest('[data-payout-id]');
+        if (button) openPayoutModal(Number(button.dataset.payoutId), button.dataset.payoutName, Number(button.dataset.payoutBalance));
+      });
+    }
 
     if (!affiliates.length) {
       tbody.innerHTML = `<tr><td colspan="7" class="no-data">No affiliates registered yet.</td></tr>`;
@@ -108,7 +115,7 @@
           <td>${a.last_payout_date ? new Date(a.last_payout_date).toLocaleDateString('en-GB') : 'Never'}</td>
           <td>
             ${hasUnpaid ? `
-              <button class="btn-primary" style="background:#22c55e; padding:6px 14px; font-size:12px;" onclick="openPayoutModal(${a.affiliate_id}, '${escapeHTML(a.name)}', ${bal})">
+              <button class="btn-primary" style="background:#22c55e; padding:6px 14px; font-size:12px;" data-payout-id="${Number(a.affiliate_id)}" data-payout-name="${escapeHTML(a.name)}" data-payout-balance="${Number(bal)}">
                 <i class="fas fa-check-circle"></i> Mark as Paid
               </button>
             ` : `

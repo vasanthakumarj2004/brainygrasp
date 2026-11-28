@@ -89,6 +89,13 @@
   function renderAffiliatesTable(affiliates) {
     const tbody = document.getElementById('affiliatesTableBody');
     if (!tbody) return;
+    if (!tbody.dataset.actionsBound) {
+      tbody.dataset.actionsBound = 'true';
+      tbody.addEventListener('click', event => {
+        const button = event.target.closest('[data-edit-affiliate]');
+        if (button) editAffiliate(Number(button.dataset.editAffiliate));
+      });
+    }
 
     if (!affiliates.length) {
       tbody.innerHTML = `<tr><td colspan="10" class="no-data">No affiliates found. Click "+ Create Affiliate Account" to add one.</td></tr>`;
@@ -107,7 +114,7 @@
         <td><strong style="color:#22c55e">₹${Number(a.current_balance).toLocaleString()}</strong></td>
         <td><span class="${a.status === 'ACTIVE' ? 'badge-active' : 'badge-inactive'}">${a.status}</span></td>
         <td>
-          <button class="btn-secondary" style="padding:4px 10px; font-size:12px;" onclick="editAffiliate(${a.id})">
+          <button class="btn-secondary" style="padding:4px 10px; font-size:12px;" data-edit-affiliate="${Number(a.id)}">
             <i class="fas fa-edit"></i> Edit
           </button>
         </td>

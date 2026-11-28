@@ -13,6 +13,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load fresh data from API
   await loadDashboardData();
   await loadCommissions();
+  document.addEventListener('click', event => {
+    if (event.target.closest('[data-retry-commissions]')) loadCommissions();
+  });
 
   // Copy referral link handler
   const copyBtn = document.getElementById('btnCopyLink');
@@ -223,7 +226,7 @@ async function loadCommissions() {
     tableBody.innerHTML = `
       <tr><td colspan="5" style="text-align:center;color:#EF4444;padding:20px;">
         ⚠️ Failed to load commission history.
-        <button onclick="loadCommissions()" class="btn-retry" style="margin-left:8px;">
+        <button type="button" data-retry-commissions class="btn-retry" style="margin-left:8px;">
           <i class="fas fa-redo"></i> Retry
         </button>
       </td></tr>`;

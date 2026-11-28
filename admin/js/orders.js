@@ -140,7 +140,7 @@
         <td><span style="font-family:monospace;font-size:12px;font-weight:600;color:#334155">${esc(awb)}</span></td>
         <td style="font-size:12px;color:var(--muted)">${esc(courier)}</td>
         <td style="font-size:12px;color:var(--muted)">${fmtDate(o.created_at)}</td>
-        <td style="text-align:center" onclick="event.stopPropagation()">
+        <td class="order-actions-cell" style="text-align:center">
           ${actionBtn}
         </td>
       </tr>`;
@@ -148,6 +148,9 @@
 
     tbody.querySelectorAll('tr[data-id]').forEach(tr => {
       tr.onclick = () => openModal(tr.dataset.id);
+    });
+    tbody.querySelectorAll('.order-actions-cell').forEach(cell => {
+      cell.addEventListener('click', event => event.stopPropagation());
     });
 
     tbody.querySelectorAll('.btn-refresh-shipment').forEach(btn => {

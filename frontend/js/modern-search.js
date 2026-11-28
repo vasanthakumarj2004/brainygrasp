@@ -138,7 +138,24 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
             const data = await res.json();
-            const products = data.products || [];
+            // Price fields are numeric at the API boundary; coerce and validate
+            // them before interpolating them into the result HTML.
+            const parsePrice = value => {
+                if ((typeof value !== 'number' && typeof value !== 'string') ||
+                    (typeof value === 'string' && !value.trim())) return null;
+                const parsed = Number(value);
+                return Number.isFinite(parsed) ? parsed : null;
+            };
+            const products = (Array.isArray(data.products) ? data.products : [])
+                .map(item => {
+                    const price = parsePrice(item?.price);
+                    return {
+                        ...item,
+                        price,
+                        original_price: parsePrice(item?.original_price)
+                    };
+                })
+                .filter(item => item.price !== null && item.price > 0);
 
             if (products.length === 0) {
                 showNoResults(query);
@@ -150,11 +167,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     <img src="${escapeHTML(item.image || '')}"
                          alt="${escapeHTML(item.name)}"
                          class="search-result-img"
-                         onerror="this.onerror=null;this.src='/images/product-placeholder.svg'">
+                         data-image-fallback="product">
                     <div class="search-result-info">
                         <h5>${highlightMatch(item.name, query)}</h5>
                         <p>&#8377;${item.price}
-                            ${item.original_price && item.original_price > item.price
+                            ${item.original_price !== null && item.original_price > item.price
                                 ? `<span style="text-decoration:line-through; color:#999; font-size:0.85em; margin-left:4px;">&#8377;${item.original_price}</span>`
                                 : ''}
                         </p>
