@@ -5,150 +5,653 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cart | BrainyGrasp</title>
   <meta name="description" content="Review your BrainyGrasp cart and proceed to secure checkout.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/common.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <style>
-    /* -- Cart Page Item Layout -- */
-    #cartPageEmpty { display: none; }
+    :root {
+      --cp-primary: #667eea;
+      --cp-primary-dark: #5a67d8;
+      --cp-orange: #FF6B35;
+      --cp-orange-end: #f7b731;
+      --cp-green: #00b894;
+      --cp-green-dark: #218c74;
+      --cp-bg: #f4f7ff;
+      --cp-card: #ffffff;
+      --cp-text: #1e2533;
+      --cp-muted: #636e72;
+      --cp-border: #e5eaf4;
+      --cp-shadow: 0 10px 30px rgba(31, 41, 74, 0.07);
+    }
 
-    .cart-item {
+    body {
+      background: var(--cp-bg);
+      color: var(--cp-text);
+      font-family: 'Nunito', sans-serif;
+    }
+
+    .cp-header {
+      background: #fff;
+      box-shadow: 0 2px 14px rgba(31, 41, 74, 0.06);
+      position: sticky;
+      top: 0;
+      z-index: 150;
+    }
+    .cp-header-inner {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 0;
-      border-bottom: 1px solid #f0f0f0;
-      gap: 12px;
-    }
-    .cart-item-row-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      flex: 1;
-      min-width: 0;
-    }
-    .cart-item-row-bottom {
-      display: flex;
-      align-items: center;
       gap: 16px;
-      flex-shrink: 0;
+      padding: 12px 0;
     }
-    .cart-item-info {
-      flex: 1;
-      min-width: 0;
-    }
-    .cart-item-name {
+    .cp-continue-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-radius: 10px;
+      border: 1.5px solid var(--cp-border);
+      background: #f8faff;
+      color: var(--cp-text);
       font-weight: 700;
-      font-size: 0.95rem;
-      margin-bottom: 3px;
-      word-break: break-word;
-      overflow-wrap: anywhere;
+      font-size: 0.9rem;
+      text-decoration: none;
+      transition: all 0.2s ease;
     }
-    .cart-item-meta { font-size: 0.82rem; color: #888; }
-    .cart-item-controls {
+    .cp-continue-btn:hover {
+      border-color: var(--cp-primary);
+      color: var(--cp-primary);
+      background: #fff;
+    }
+
+    .cp-main {
+      padding: 28px 0 64px;
+    }
+
+    /* Stepper */
+    .cp-stepper {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+    .cp-step {
       display: flex;
       align-items: center;
       gap: 8px;
+      font-size: 0.85rem;
+      font-weight: 800;
+      color: #a0aec0;
+    }
+    .cp-step.active { color: var(--cp-primary); }
+    .cp-step-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #e2e8f0;
+      color: #64748b;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.78rem;
+      font-weight: 900;
+    }
+    .cp-step.active .cp-step-num {
+      background: var(--cp-primary);
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.35);
+    }
+    .cp-step-line {
+      width: 52px;
+      height: 2px;
+      background: #dce3f0;
+      margin: 0 10px;
+    }
+
+    .cp-page-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .cp-page-head h1 {
+      font-family: 'Fredoka', sans-serif;
+      font-size: 1.9rem;
+      color: var(--cp-text);
+      margin: 0;
+    }
+    .cp-page-sub {
+      color: var(--cp-muted);
+      font-size: 0.94rem;
+      margin: 0;
+      font-weight: 600;
+    }
+
+    /* Empty state */
+    #cartPageEmpty {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      background: var(--cp-card);
+      border: 1px solid var(--cp-border);
+      border-radius: 20px;
+      box-shadow: var(--cp-shadow);
+      padding: 56px 24px;
+      margin-top: 12px;
+      gap: 12px;
+    }
+    .cp-empty-icon {
+      width: 82px;
+      height: 82px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #eef2ff, #fff3ed);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--cp-orange);
+      font-size: 2rem;
+      margin-bottom: 4px;
+    }
+    #cartPageEmpty h2 {
+      font-family: 'Fredoka', sans-serif;
+      font-size: 1.5rem;
+      color: var(--cp-text);
+      margin: 0;
+    }
+    #cartPageEmpty p {
+      color: var(--cp-muted);
+      font-size: 0.96rem;
+      margin: 0 0 8px;
+    }
+    .cp-explore-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 13px 24px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--cp-orange), var(--cp-orange-end));
+      color: #fff;
+      font-weight: 800;
+      font-size: 0.95rem;
+      text-decoration: none;
+      box-shadow: 0 8px 20px rgba(255, 107, 53, 0.3);
+      transition: transform 0.2s ease;
+    }
+    .cp-explore-btn:hover { transform: translateY(-2px); }
+
+    /* Two-column Cart Grid */
+    .cp-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 380px;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .cp-card {
+      background: var(--cp-card);
+      border: 1px solid var(--cp-border);
+      border-radius: 20px;
+      box-shadow: var(--cp-shadow);
+      padding: 24px;
+    }
+    .cp-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 14px;
+      margin-bottom: 8px;
+      border-bottom: 1px solid var(--cp-border);
+    }
+    .cp-card-title {
+      font-family: 'Fredoka', sans-serif;
+      font-size: 1.25rem;
+      color: var(--cp-text);
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .cp-card-title i {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: rgba(102, 126, 234, 0.12);
+      color: var(--cp-primary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.92rem;
+    }
+    .cp-count-pill {
+      background: #f0f4ff;
+      color: var(--cp-primary-dark);
+      font-size: 0.78rem;
+      font-weight: 800;
+      padding: 5px 12px;
+      border-radius: 99px;
+    }
+
+    /* Item rows inside #cartPageItems */
+    .cp-items-list {
+      display: flex;
+      flex-direction: column;
+    }
+    .cp-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 0;
+      border-bottom: 1px solid #f1f4fa;
+    }
+    .cp-item:last-child { border-bottom: none; padding-bottom: 4px; }
+
+    .cp-item-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex: 1;
+      min-width: 0;
+    }
+    .cp-item-thumb {
+      width: 72px;
+      height: 72px;
+      border-radius: 14px;
+      border: 1px solid var(--cp-border);
+      background: #f8faff;
+      object-fit: cover;
       flex-shrink: 0;
     }
-    .quantity-btn {
-      width: 44px; height: 44px;
-      min-width: 44px; min-height: 44px;
-      border: 1.5px solid #ddd;
-      border-radius: 8px;
-      background: #f8f8f8;
-      font-size: 1.1rem;
+    .cp-item-placeholder {
+      width: 72px;
+      height: 72px;
+      border-radius: 14px;
+      border: 1px solid var(--cp-border);
+      background: linear-gradient(135deg, #eef2ff, #fff4ee);
+      color: var(--cp-primary);
+      font-size: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .cp-item-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .cp-item-name {
+      font-weight: 800;
+      font-size: 1rem;
+      color: var(--cp-text);
+      margin-bottom: 4px;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+    .cp-item-unit {
+      font-size: 0.85rem;
+      color: var(--cp-muted);
       font-weight: 700;
-      cursor: pointer;
-      transition: all 0.15s;
-      display: flex; align-items: center; justify-content: center;
     }
-    .quantity-btn:hover { background: #667eea; color: #fff; border-color: #667eea; }
-    .cart-item-qty { min-width: 28px; text-align: center; font-weight: 700; font-size: 0.95rem; }
-    .cart-item-subtotal { font-weight: 800; color: #667eea; min-width: 60px; text-align: right; }
-    .cart-item-remove {
-      background: none; border: none; cursor: pointer;
-      color: #e74c3c; font-size: 0.95rem;
-      padding: 6px; border-radius: 6px; transition: background 0.15s;
-    }
-    .cart-item-remove:hover { background: #fdecea; }
 
-    /* Mobile responsiveness for cart item rows */
+    .cp-item-right {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      flex-shrink: 0;
+    }
+    .cp-qty-stepper {
+      display: inline-flex;
+      align-items: center;
+      background: #f8faff;
+      border: 1.5px solid var(--cp-border);
+      border-radius: 12px;
+      padding: 3px;
+      gap: 4px;
+    }
+    .quantity-btn {
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 9px;
+      background: #fff;
+      color: var(--cp-text);
+      font-size: 1.05rem;
+      font-weight: 800;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      transition: all 0.15s ease;
+    }
+    .quantity-btn:hover {
+      background: var(--cp-primary);
+      color: #fff;
+    }
+    .cart-item-qty {
+      min-width: 28px;
+      text-align: center;
+      font-weight: 800;
+      font-size: 0.95rem;
+      color: var(--cp-text);
+    }
+    .cp-item-subtotal {
+      min-width: 72px;
+      text-align: right;
+      font-weight: 800;
+      font-size: 1.04rem;
+      color: var(--cp-text);
+    }
+    .cart-item-remove {
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 10px;
+      background: transparent;
+      color: #a0aec0;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.95rem;
+      transition: all 0.15s ease;
+    }
+    .cart-item-remove:hover {
+      background: #fff1f0;
+      color: #e53e3e;
+    }
+
+    /* Sticky Order Summary Card */
+    .cp-summary-card {
+      position: sticky;
+      top: 86px;
+    }
+    .cp-ship-box {
+      background: #f8faff;
+      border: 1px solid var(--cp-border);
+      border-radius: 14px;
+      padding: 13px 14px;
+      margin: 14px 0 18px;
+    }
+    .cp-ship-box.unlocked {
+      background: #f0fdf9;
+      border-color: rgba(0, 184, 148, 0.35);
+    }
+    .cp-ship-text {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: var(--cp-text);
+      margin-bottom: 8px;
+    }
+    .cp-ship-text i { color: var(--cp-orange); }
+    .cp-ship-box.unlocked .cp-ship-text i { color: var(--cp-green); }
+    .cp-ship-track {
+      height: 7px;
+      border-radius: 99px;
+      background: #e2e8f0;
+      overflow: hidden;
+    }
+    .cp-ship-fill {
+      height: 100%;
+      width: 0;
+      border-radius: 99px;
+      background: linear-gradient(90deg, var(--cp-orange), var(--cp-green));
+      transition: width 0.35s ease;
+    }
+
+    .cp-summary-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 11px;
+      padding-bottom: 14px;
+      border-bottom: 2px dashed var(--cp-border);
+    }
+    .cp-sum-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.92rem;
+      color: var(--cp-muted);
+      font-weight: 700;
+    }
+    .cp-sum-row strong {
+      color: var(--cp-text);
+      font-weight: 800;
+    }
+    .cp-free-badge {
+      color: var(--cp-green-dark);
+      background: #dcfce7;
+      padding: 2px 9px;
+      border-radius: 99px;
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .cp-promo-hint {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 14px;
+      padding: 9px 12px;
+      border-radius: 10px;
+      background: #fff8f3;
+      border: 1px dashed rgba(255, 107, 53, 0.35);
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #b45309;
+    }
+
+    .cp-total-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 16px 0 18px;
+    }
+    .cp-total-label {
+      font-family: 'Fredoka', sans-serif;
+      font-size: 1.12rem;
+      color: var(--cp-text);
+    }
+    .cp-total-amount {
+      font-family: 'Fredoka', sans-serif;
+      font-size: 1.55rem;
+      color: var(--cp-orange);
+      font-weight: 700;
+    }
+
+    .cp-checkout-btn {
+      width: 100%;
+      padding: 15px 18px;
+      border: none;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--cp-orange), var(--cp-orange-end));
+      color: #fff;
+      font-family: 'Nunito', sans-serif;
+      font-size: 1rem;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      box-shadow: 0 8px 24px rgba(255, 107, 53, 0.35);
+      transition: all 0.2s ease;
+    }
+    .cp-checkout-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(255, 107, 53, 0.45);
+    }
+    .cp-checkout-btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .cp-trust {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--cp-border);
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--cp-muted);
+    }
+    .cp-trust span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .cp-trust i { color: var(--cp-green); }
+
+    @media (max-width: 900px) {
+      .cp-layout {
+        grid-template-columns: 1fr;
+      }
+      .cp-summary-card {
+        position: static;
+      }
+    }
+
     @media (max-width: 600px) {
-      .cart-items { width: 100%; box-sizing: border-box; }
-      .cart-item {
+      .cp-main { padding: 18px 0 44px; }
+      .cp-card { padding: 16px; border-radius: 16px; }
+      .cp-step-line { width: 24px; margin: 0 6px; }
+      .cp-step span { display: none; }
+      .cp-item {
         flex-direction: column;
         align-items: stretch;
-        background: #ffffff;
-        border: 1px solid #eee;
-        border-radius: 12px;
-        padding: 12px 14px;
-        margin-bottom: 12px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.03);
-        gap: 10px;
+        gap: 12px;
       }
-      .cart-item-row-top {
-        display: flex;
+      .cp-item-right {
         justify-content: space-between;
-        align-items: flex-start;
-        gap: 10px;
-        width: 100%;
+        padding-top: 10px;
+        border-top: 1px dashed var(--cp-border);
       }
-      .cart-item-row-bottom {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        width: 100%;
-        border-top: 1px dashed #eee;
-        padding-top: 8px;
+      .cp-item-thumb, .cp-item-placeholder {
+        width: 58px;
+        height: 58px;
       }
-      .cart-item-controls {
-        gap: 6px;
-      }
-      .quantity-btn {
-        width: 36px; height: 36px;
-        min-width: 36px; min-height: 36px;
-        font-size: 0.95rem;
-      }
-      .cart-item-qty { min-width: 24px; font-size: 0.9rem; }
-      .cart-item-subtotal { font-size: 0.95rem; }
+      .cp-trust { grid-template-columns: 1fr; }
     }
   </style>
   <link rel="stylesheet" href="css/mobile-responsive.css">
   <link rel="stylesheet" href="css/policy-mobile.css">
 </head>
 <body>
-  <header class="main-header" id="mainHeader">
+  <header class="cp-header" id="mainHeader">
     <div class="container">
-      <div class="header-inner">
-        <!-- Logo -->
+      <div class="cp-header-inner">
         <a href="index" class="logo" style="display: flex; align-items: center; gap: 8px; text-decoration: none;">
           <img src="images/logo.jpeg" alt="BrainyGrasp Logo" class="brand-logo">
         </a>
         <div class="header-actions">
-          <a href="index" class="btn btn-secondary">Continue Shopping</a>
+          <a href="collections?collection=all" class="cp-continue-btn">
+            <i class="fas fa-arrow-left"></i> Continue Shopping
+          </a>
         </div>
       </div>
     </div>
   </header>
 
-  <main class="section">
+  <main class="cp-main">
     <div class="container">
-      <div class="section-header">
-        <h1 class="section-title">Your Cart</h1>
-        <p class="section-subtitle">Review items before checkout.</p>
-      </div>
-      <div id="cartPageEmpty" class="cart-empty">
-        <i class="fas fa-shopping-bag"></i>
-        <p>No products in the cart.</p>
-      </div>
-      <div id="cartPageItems" class="cart-items"></div>
-      <div class="cart-footer">
-        <div class="cart-total">
-          <span>TOTAL:</span>
-          <span id="cartPageTotal">&#8377;0</span>
+      <div class="cp-stepper" aria-label="Checkout progress">
+        <div class="cp-step active">
+          <span class="cp-step-num">1</span>
+          <span>Cart</span>
         </div>
-        <button type="button" class="btn-checkout" id="cartPageCheckout">PROCEED TO CHECKOUT</button>
+        <div class="cp-step-line"></div>
+        <div class="cp-step">
+          <span class="cp-step-num">2</span>
+          <span>Checkout</span>
+        </div>
+        <div class="cp-step-line"></div>
+        <div class="cp-step">
+          <span class="cp-step-num">3</span>
+          <span>Confirmed</span>
+        </div>
+      </div>
+
+      <div class="cp-page-head">
+        <h1>Your Shopping Cart</h1>
+        <p class="cp-page-sub">Review quantities and estimated delivery before checkout.</p>
+      </div>
+
+      <div id="cartPageEmpty">
+        <div class="cp-empty-icon"><i class="fas fa-shopping-bag"></i></div>
+        <h2>Your cart is empty</h2>
+        <p>Looks like you haven't added any educational toys yet.</p>
+        <a href="collections?collection=all" class="cp-explore-btn">
+          <i class="fas fa-shapes"></i> Browse Educational Toys
+        </a>
+      </div>
+
+      <div id="cartPageContent" class="cp-layout">
+        <section class="cp-card" aria-label="Cart items">
+          <div class="cp-card-head">
+            <h2 class="cp-card-title"><i class="fas fa-shopping-bag"></i> Cart Items</h2>
+            <span class="cp-count-pill" id="cartPageItemCount">0 items</span>
+          </div>
+          <div id="cartPageItems" class="cp-items-list"></div>
+        </section>
+
+        <aside class="cp-card cp-summary-card" aria-label="Order summary">
+          <div class="cp-card-head">
+            <h2 class="cp-card-title"><i class="fas fa-receipt"></i> Order Summary</h2>
+          </div>
+
+          <div class="cp-ship-box" id="cartPageShipBox">
+            <div class="cp-ship-text">
+              <i class="fas fa-truck"></i>
+              <span id="cartPageShipMsg">Add <strong>&#8377;999</strong> more for FREE delivery</span>
+            </div>
+            <div class="cp-ship-track">
+              <div class="cp-ship-fill" id="cartPageShipFill"></div>
+            </div>
+          </div>
+
+          <div class="cp-summary-rows">
+            <div class="cp-sum-row">
+              <span>Items Subtotal</span>
+              <strong id="cartPageSubtotal">&#8377;0</strong>
+            </div>
+            <div class="cp-sum-row">
+              <span>Estimated Delivery</span>
+              <span id="cartPageShipping">&#8377;60</span>
+            </div>
+          </div>
+
+          <div class="cp-promo-hint">
+            <i class="fas fa-tag"></i>
+            <span>Codes like <strong>BRAINY10</strong>, <strong>BRAINY15</strong> &amp; <strong>FLAT50</strong> can be applied at checkout.</span>
+          </div>
+
+          <div class="cp-total-row">
+            <span class="cp-total-label">Estimated Total</span>
+            <span class="cp-total-amount" id="cartPageTotal">&#8377;0</span>
+          </div>
+
+          <button type="button" class="btn-checkout cp-checkout-btn" id="cartPageCheckout">
+            <i class="fas fa-lock"></i> Proceed to Checkout <i class="fas fa-arrow-right"></i>
+          </button>
+
+          <div class="cp-trust">
+            <span><i class="fas fa-shield-alt"></i> Razorpay &amp; COD</span>
+            <span><i class="fas fa-truck"></i> Free Ship &#8377;999+</span>
+            <span><i class="fas fa-box-open"></i> Safe Packaging</span>
+            <span><i class="fas fa-check-circle"></i> Quality Checked</span>
+          </div>
+        </aside>
       </div>
     </div>
   </main>
@@ -160,4 +663,3 @@
   <script src="js/cart.js"></script>
 </body>
 </html>
-

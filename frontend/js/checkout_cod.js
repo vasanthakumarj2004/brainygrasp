@@ -54,6 +54,20 @@ document.querySelectorAll('[data-checkout-tab]').forEach(button => {
   button.addEventListener('click', () => window.switchTab(button.dataset.checkoutTab));
 });
 document.getElementById('applyPromoBtn')?.addEventListener('click', () => window.applyPromo());
+document.getElementById('promoInput')?.addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    window.applyPromo();
+  }
+});
+document.querySelectorAll('[data-promo-code]').forEach(btn => {
+  if (!btn?.dataset?.promoCode) return;
+  btn.addEventListener('click', () => {
+    const input = document.getElementById('promoInput');
+    if (input) input.value = btn.dataset.promoCode;
+    window.applyPromo();
+  });
+});
 document.getElementById('checkoutBackLink')?.addEventListener('click', event => {
   if (window.history.length > 1) {
     event.preventDefault();
@@ -107,7 +121,9 @@ function validateAddress(a) {
 // ── Render Order Summary ───────────────────────────────────────
 function renderSummary() {
   const wrap = document.getElementById('coItems');
+  const countBadge = document.getElementById('coItemCountBadge');
   if (!activeCart || !activeCart.length) {
+    if (countBadge) countBadge.textContent = '0 items';
     wrap.innerHTML = `
       <div class="empty-cart">
         <i class="fas fa-shopping-bag"></i>
@@ -125,27 +141,46 @@ function renderSummary() {
   activeTotal = serverQuote?.total ?? (activeSubtotal + shipping - promoDiscount);
   if (activeTotal < 0) activeTotal = 0;
 
-  const itemsHTML = activeCart.map(item => `
-    <div class="order-item-row">
-      <div>
-        <div class="oi-name">${esc(item.name)}</div>
-        <div class="oi-qty">Qty: ${item.quantity || 1} × ₹${item.price}</div>
-      </div>
-      <div class="oi-price">₹${item.price * (item.quantity || 1)}</div>
-    </div>`).join('');
+  const totalUnits = activeCart.reduce((sum, item) => sum + (item.quantity || 1), 0);
+  if (countBadge) countBadge.textContent = `${totalUnits} item${totalUnits === 1 ? '' : 's'}`;
+
+  const shipPct = Math.min(100, Math.round((activeSubtotal / 999) * 100));
+  const shipBannerHTML = shipping === 0
+    ? `<div class="co-ship-banner unlocked"><div class="co-ship-top"><i class="fas fa-check-circle"></i><span>You unlocked <strong>FREE delivery</strong>!</span></div><div class="co-ship-track"><div class="co-ship-fill" style="width:100%"></div></div></div>`
+    : `<div class="co-ship-banner"><div class="co-ship-top"><i class="fas fa-truck"></i><span>Add <strong>₹${Math.max(0, 999 - activeSubtotal)}</strong> more for <strong>FREE delivery</strong></span></div><div class="co-ship-track"><div class="co-ship-fill" style="width:${shipPct}%"></div></div></div>`;
+
+  const itemsHTML = activeCart.map(item => {
+    const qty = item.quantity || 1;
+    const thumb = item.image
+      ? `<img class="oi-thumb" src="${esc(item.image)}" alt="${esc(item.name)}" data-image-fallback="cart">`
+      : '';
+    return `
+      <div class="order-item-row">
+        <div class="oi-left">
+          ${thumb}
+          <div class="oi-thumb-placeholder" style="${item.image ? 'display:none' : ''}"><i class="fas fa-puzzle-piece"></i></div>
+          <div class="oi-details">
+            <div class="oi-name">${esc(item.name)}</div>
+            <div class="oi-qty">Qty: ${qty} × ₹${item.price}</div>
+          </div>
+        </div>
+        <div class="oi-price">₹${item.price * qty}</div>
+      </div>`;
+  }).join('');
 
   const shippingHTML = shipping === 0
     ? '<span class="free-ship">FREE</span>'
     : `₹${shipping}`;
 
   const discountRow = promoDiscount > 0
-    ? `<div class="tot-row" style="color:var(--green)"><span>Promo Discount</span><span>− ₹${promoDiscount}</span></div>`
+    ? `<div class="tot-row tot-discount"><span>Promo Discount${appliedPromoCode ? ` (${esc(appliedPromoCode)})` : ''}</span><span>− ₹${promoDiscount}</span></div>`
     : '';
 
   wrap.innerHTML = `
-    ${itemsHTML}
+    ${shipBannerHTML}
+    <div class="oi-list">${itemsHTML}</div>
     <div class="totals-block">
-      <div class="tot-row"><span>Subtotal (${activeCart.length} item${activeCart.length > 1 ? 's' : ''})</span><span>₹${activeSubtotal}</span></div>
+      <div class="tot-row"><span>Items Subtotal (${totalUnits} item${totalUnits > 1 ? 's' : ''})</span><span>₹${activeSubtotal}</span></div>
       <div class="tot-row"><span>Delivery</span><span>${shippingHTML}</span></div>
       ${discountRow}
       <div class="tot-row grand"><span>Total Payable</span><span style="color:var(--orange)">₹${activeTotal}</span></div>

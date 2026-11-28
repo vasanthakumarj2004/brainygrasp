@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Checkout | BrainyGrasp</title>
-  <meta name="description" content="Secure checkout � BrainyGrasp educational toys. Pay via Cash on Delivery or Razorpay.">
+  <meta name="description" content="Secure checkout — BrainyGrasp educational toys. Pay via Cash on Delivery or Razorpay.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -153,30 +153,62 @@
 
     /* -- ORDER SUMMARY (RIGHT PANEL) -- */
     .sticky-panel{position:sticky;top:80px}
-    .order-item-row{display:flex;justify-content:space-between;align-items:flex-start;
-      padding:12px 0;border-bottom:1px solid #f1f2f6;font-size:.88rem;gap:10px}
+    .summary-head{display:flex;align-items:center;justify-content:space-between;gap:10px;
+      margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+    .summary-head .card-title{margin-bottom:0}
+    .co-count-pill{background:#f0f4ff;color:var(--primary-dark);font-size:.76rem;font-weight:800;
+      padding:4px 11px;border-radius:99px;white-space:nowrap}
+    .co-ship-banner{background:#f8faff;border:1px solid var(--border);border-radius:12px;
+      padding:10px 12px;margin-bottom:14px}
+    .co-ship-banner.unlocked{background:#f0fdf9;border-color:rgba(0,184,148,.35)}
+    .co-ship-top{display:flex;align-items:center;gap:8px;font-size:.8rem;font-weight:700;
+      color:var(--text);margin-bottom:7px}
+    .co-ship-top i{color:var(--orange)}
+    .co-ship-banner.unlocked .co-ship-top i{color:var(--green)}
+    .co-ship-track{height:6px;background:#e2e8f0;border-radius:99px;overflow:hidden}
+    .co-ship-fill{height:100%;background:linear-gradient(90deg,var(--orange),var(--green));
+      border-radius:99px;transition:width .35s ease}
+    .oi-list{display:flex;flex-direction:column}
+    .order-item-row{display:flex;justify-content:space-between;align-items:center;
+      padding:11px 0;border-bottom:1px solid #f1f2f6;font-size:.88rem;gap:12px}
     .order-item-row:last-child{border-bottom:none}
-    .oi-name{font-weight:700;line-height:1.4}
-    .oi-qty{font-size:.75rem;color:var(--muted);margin-top:2px}
-    .oi-price{font-weight:800;color:var(--primary-dark);white-space:nowrap}
-    .totals-block{margin-top:14px;padding-top:14px;border-top:2px dashed var(--border)}
-    .tot-row{display:flex;justify-content:space-between;font-size:.87rem;
-      color:var(--muted);margin-bottom:8px}
-    .tot-row.grand{font-size:1.1rem;font-weight:800;color:var(--text);
-      margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
-    .free-ship{color:var(--green);font-weight:800}
+    .oi-left{display:flex;align-items:center;gap:11px;flex:1;min-width:0}
+    .oi-thumb{width:50px;height:50px;border-radius:10px;border:1px solid var(--border);
+      object-fit:cover;background:#f8faff;flex-shrink:0}
+    .oi-thumb-placeholder{width:50px;height:50px;border-radius:10px;border:1px solid var(--border);
+      background:linear-gradient(135deg,#eef2ff,#fff4ee);color:var(--primary);
+      display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0}
+    .oi-details{flex:1;min-width:0}
+    .oi-name{font-weight:800;line-height:1.35;color:var(--text);word-break:break-word}
+    .oi-qty{font-size:.76rem;color:var(--muted);margin-top:3px;font-weight:700}
+    .oi-price{font-weight:800;color:var(--text);white-space:nowrap;font-size:.94rem}
+    .totals-block{margin-top:12px;padding-top:14px;border-top:2px dashed var(--border)}
+    .tot-row{display:flex;justify-content:space-between;align-items:center;font-size:.88rem;
+      color:var(--muted);margin-bottom:9px;font-weight:700}
+    .tot-row span:last-child{color:var(--text);font-weight:800}
+    .tot-row.tot-discount span{color:var(--green-dark)}
+    .tot-row.grand{font-size:1.12rem;font-weight:800;color:var(--text);
+      margin-top:12px;padding-top:12px;border-top:1px solid var(--border);margin-bottom:0}
+    .free-ship{color:var(--green-dark);background:#dcfce7;padding:2px 9px;border-radius:99px;
+      font-size:.75rem;font-weight:800}
     .empty-cart{text-align:center;padding:36px 20px;color:var(--muted)}
     .empty-cart i{font-size:2.8rem;opacity:.3;margin-bottom:12px;display:block}
 
     /* -- PROMO CODE -- */
-    .promo-row{display:flex;gap:8px;margin-top:14px}
+    .promo-wrap{margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+    .promo-row{display:flex;gap:8px}
     .promo-row input{flex:1;padding:10px 12px;border:1.5px solid var(--border);
       border-radius:var(--radius-sm);font-family:inherit;font-size:.85rem;background:#f8f9fa}
-    .promo-row input:focus{outline:none;border-color:var(--primary)}
+    .promo-row input:focus{outline:none;border-color:var(--primary);background:#fff}
     .btn-promo{padding:10px 16px;background:var(--primary);color:#fff;border:none;
       border-radius:var(--radius-sm);font-weight:800;font-size:.82rem;cursor:pointer;
       white-space:nowrap;transition:opacity .2s}
     .btn-promo:hover{opacity:.85}
+    .promo-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+    .promo-chip{border:1px dashed rgba(102,126,234,.45);background:#f5f7ff;color:var(--primary-dark);
+      border-radius:99px;padding:4px 10px;font-size:.72rem;font-weight:800;cursor:pointer;
+      font-family:inherit;transition:all .15s}
+    .promo-chip:hover{background:var(--primary);color:#fff;border-style:solid}
 
     /* -- TRUST BADGES -- */
     .trust-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:18px;padding-top:16px;
@@ -337,7 +369,7 @@
       <div class="profile-banner" id="profileBanner">
         <div class="profile-avatar" id="profileInitial">?</div>
         <div class="profile-info">
-          <div class="profile-name" id="profileName">Loading profile�</div>
+          <div class="profile-name" id="profileName">Loading profile…</div>
           <div class="profile-tag" id="profileEmail"></div>
         </div>
         <a href="profile-setup" class="profile-edit-link"><i class="fas fa-pencil-alt"></i> Edit Profile</a>
@@ -437,9 +469,9 @@
           <input type="radio" name="payMethod" id="payRZP" class="pay-radio" value="razorpay">
           <label for="payRZP" class="pay-card">
             <div class="pay-badge">INSTANT</div>
-            <span class="pay-icon"><i class="fas fa-money-bill-wave"></i></span>
+            <span class="pay-icon"><i class="fas fa-bolt" style="color:var(--orange)"></i></span>
             <div class="pay-name">Pay Online</div>
-            <div class="pay-desc">UPI � Card � Net Banking</div>
+            <div class="pay-desc">UPI &bull; Card &bull; Net Banking</div>
             <div class="rzp-logos">
               <span class="rzp-logo">UPI</span>
               <span class="rzp-logo">VISA</span>
@@ -471,8 +503,8 @@
       <!-- Trust badges -->
       <div class="trust-row">
         <div class="trust-item"><i class="fas fa-shield-alt"></i> 100% Secure</div>
-        <div class="trust-item"><i class="fas fa-truck"></i> Free Ship ?999+</div>
-        <div class="trust-item"><i class="fas fa-undo"></i> 15-Day Returns</div>
+        <div class="trust-item"><i class="fas fa-truck"></i> Free Ship &#8377;999+</div>
+        <div class="trust-item"><i class="fas fa-check-circle"></i> Quality Checked</div>
         <div class="trust-item"><i class="fas fa-lock"></i> Safe Payments</div>
       </div>
     </div>
@@ -482,7 +514,10 @@
   <!-- RIGHT: ORDER SUMMARY -->
   <div class="sticky-panel">
     <div class="card">
-      <h2 class="card-title"><i class="fas fa-shopping-bag"></i> Order Summary</h2>
+      <div class="summary-head">
+        <h2 class="card-title"><i class="fas fa-shopping-bag"></i> Order Summary</h2>
+        <span class="co-count-pill" id="coItemCountBadge">0 items</span>
+      </div>
       <div id="coItems">
         <div class="empty-cart">
           <i class="fas fa-shopping-bag"></i>
@@ -491,11 +526,18 @@
       </div>
 
       <!-- Promo code -->
-      <div class="promo-row">
-        <input type="text" id="promoInput" placeholder="Promo / Coupon code" style="text-transform:uppercase">
-        <button class="btn-promo" id="applyPromoBtn">Apply</button>
+      <div class="promo-wrap">
+        <div class="promo-row">
+          <input type="text" id="promoInput" placeholder="Promo / Coupon code" style="text-transform:uppercase">
+          <button class="btn-promo" id="applyPromoBtn" type="button">Apply</button>
+        </div>
+        <div class="promo-chips" aria-label="Available offers">
+          <button type="button" class="promo-chip" data-promo-code="BRAINY10">BRAINY10 &bull; 10% OFF</button>
+          <button type="button" class="promo-chip" data-promo-code="BRAINY15">BRAINY15 &bull; 15% OFF</button>
+          <button type="button" class="promo-chip" data-promo-code="FLAT50">FLAT50 &bull; &#8377;50 OFF</button>
+        </div>
+        <div id="promoMsg" style="font-size:.78rem;margin-top:8px;font-weight:700;display:none"></div>
       </div>
-      <div id="promoMsg" style="font-size:.78rem;margin-top:6px;font-weight:700;display:none"></div>
     </div>
   </div>
 
