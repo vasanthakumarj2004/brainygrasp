@@ -36,6 +36,20 @@ async function approveShipment(id, parcel) {
     if (!job.details.parcel) {
       if (order.shipment_id || order.awb_number) throw new ShippingError('legacy_shipment', 'Reconcile this existing shipment in Shiprocket before using the new booking flow.');
       job.details = { parcel: parcelDetails(parcel || order.shipping_snapshot?.parcel), config, reference: `${config.prefix}${String(id).padStart(10, '0')}` };
+    } else if (job.phase === 'new' && !job.details.remoteOrderId) {
+      // Queue / resume is an explicit admin approval. Before any Shiprocket
+      // order-creation attempt, it is safe to adopt the current settings. A
+      // pending/known remote order keeps its original channel and reference so
+      // retries can reconcile it without creating a duplicate.
+      const previous = job.details.config || {};
+      const changed = ['channelId', 'pickup', 'postcode', 'prefix']
+        .some(key => previous[key] !== config[key]);
+      if (changed) {
+        job.details.config = config;
+        job.details.reference = `${config.prefix}${String(id).padStart(10, '0')}`;
+        delete job.details.courierId;
+        delete job.details.courierName;
+      }
     }
     // A resume preserves the approved parcel, reference and pending operation.
     await db.query(`UPDATE shipping_jobs SET details=$2, state='queued', attempts=0,

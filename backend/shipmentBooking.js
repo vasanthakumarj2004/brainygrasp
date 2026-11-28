@@ -9,33 +9,41 @@ async function advanceBooking({ job, order, address, user, config, client, save 
   orderAmounts(order);
   const d = job.details;
   parcelDetails(d.parcel);
-  if (JSON.stringify(d.config) !== JSON.stringify(config)) throw new ShippingError('configuration_changed', 'Shipping configuration changed since approval. Review this shipment.');
+  const approvedConfig = d.config || config;
+  const configurationChanged = ['channelId', 'pickup', 'postcode', 'prefix']
+    .some(key => approvedConfig[key] !== config[key]);
+  // A fresh booking must be explicitly re-approved by an admin if settings
+  // drift. Once creation may have reached Shiprocket, keep using the saved
+  // channel/reference to reconcile and finish that same shipment safely.
+  if (configurationChanged && job.phase === 'new' && !d.remoteOrderId) {
+    throw new ShippingError('configuration_changed', 'Shipping configuration changed since approval. Review this shipment.');
+  }
   if (!/^\d{6}$/.test(address.pincode) || !/^\d{10}$/.test(address.phone)) throw new ShippingError('address', 'Delivery phone number or PIN code is invalid.');
   const persist = async (phase, patch = {}) => {
     Object.assign(d, patch); job.phase = phase; await save(job);
   };
   if (job.phase === 'complete') return;
   if (!d.courierId) {
-    const courier = await client.checkServiceability({ pickupPostcode: config.postcode, deliveryPostcode: address.pincode, parcel: d.parcel, cod: order.payment_method === 'cod', orderValue: order.total });
+    const courier = await client.checkServiceability({ pickupPostcode: approvedConfig.postcode, deliveryPostcode: address.pincode, parcel: d.parcel, cod: order.payment_method === 'cod', orderValue: order.total });
     await persist(job.phase, { courierId: courier.id, courierName: courier.name });
   }
   if (!d.remoteOrderId) {
-    const existing = await client.findOrder(d.reference, config);
+    const existing = await client.findOrder(d.reference, approvedConfig);
     if (existing) {
-      const remote = await client.getOrder(existing, order, config, d.reference);
+      const remote = await client.getOrder(existing, order, approvedConfig, d.reference);
       await persist('created', remote);
     } else if (job.phase === 'create_pending') {
       throw new ShippingError('create_uncertain', 'Creation outcome is unknown. Reconciliation will check again without creating another order.', { retryable: true });
     } else {
       await persist('create_pending');
-      try { await persist('created', await client.createShipment(order, address, user, d.parcel, config, d.reference)); }
+      try { await persist('created', await client.createShipment(order, address, user, d.parcel, approvedConfig, d.reference)); }
       catch (err) {
         if (err instanceof ShippingError && !err.ambiguous) await persist('new');
         throw err;
       }
     }
   }
-  const remote = await client.getOrder(d.remoteOrderId, order, config, d.reference);
+  const remote = await client.getOrder(d.remoteOrderId, order, approvedConfig, d.reference);
   if (d.shipmentId && d.shipmentId !== remote.shipmentId) throw new ShippingError('shipment_mismatch', 'Remote shipment identifier changed.');
   if (d.awb && remote.awb && d.awb !== remote.awb) throw new ShippingError('awb_mismatch', 'Remote AWB changed. Review the shipment.');
   await persist(remote.pickupFailed ? 'pickup_failed' : job.phase, { shipmentId: remote.shipmentId,
